@@ -268,7 +268,7 @@ const CARDS = [
   verified: false,
   stats: { likes: "12.4k", comments: "892", shares: "2.1k" },
   content: "EXCLUSIVE: New AI technology promises to double your savings in just 15 days! Watch this leaked interview where top tech leaders explain the secret algorithm. Don't miss out on this limited opportunity!",
-  video: "/src/assets/e2d075e1d5cc464882baba7a257954de.MP4",
+   video: "/src/assets/e2d075e1d5cc464882baba7a257954de_small.mp4",
   redFlags: [
    "Unrealistic promise: 'double savings in 15 days'",
    "Using 'leaked' or 'secret' narrative to build curiosity",
