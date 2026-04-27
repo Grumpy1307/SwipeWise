@@ -24,6 +24,8 @@ const resolveAssetUrl = (v) => {
   return ASSETS_BY_NAME[v] || v;
 };
 
+const DEFAULT_VIDEO_POSTER = resolveAssetUrl("/src/assets/hero.png");
+
 const CARDS = [
  {
   id: 1,
@@ -288,33 +290,33 @@ const MASCOTS = [
   { 
     id: "gem", 
     name: "Gemmy", 
-    img: "/src/assets/mascot_gem.png", 
-    happyImg: "/src/assets/mascot_gem_happy.png", 
-    sadImg: "/src/assets/mascot_gem_sad.png", 
+    img: "/src/assets/mascot_gem.webp", 
+    happyImg: "/src/assets/mascot_gem_happy.webp", 
+    sadImg: "/src/assets/mascot_gem_sad.webp", 
     color: "#00d2ff" 
   },
   { 
     id: "bag", 
     name: "Baggie", 
-    img: "/src/assets/mascot_baggie.png", 
-    happyImg: "/src/assets/mascot_baggie_happy.png", 
-    sadImg: "/src/assets/mascot_baggie_sad.png", 
+    img: "/src/assets/mascot_baggie.webp", 
+    happyImg: "/src/assets/mascot_baggie_happy.webp", 
+    sadImg: "/src/assets/mascot_baggie_sad.webp", 
     color: "#2ed573" 
   },
   { 
     id: "naruto", 
     name: "Naruto", 
-    img: "/src/assets/mascot_naruto.png", 
-    happyImg: "/src/assets/mascot_naruto_happy.png", 
-    sadImg: "/src/assets/mascot_naruto_sad.png", 
+    img: "/src/assets/mascot_naruto.webp", 
+    happyImg: "/src/assets/mascot_naruto_happy.webp", 
+    sadImg: "/src/assets/mascot_naruto_sad.webp", 
     color: "#ffa502" 
   },
   { 
     id: "doraemon", 
     name: "Doraemon", 
-    img: "/src/assets/mascot_dora.png", 
-    happyImg: "/src/assets/mascot_dora_happy.png", 
-    sadImg: "/src/assets/mascot_dora_sad.png", 
+    img: "/src/assets/mascot_dora.webp", 
+    happyImg: "/src/assets/mascot_dora_happy.webp", 
+    sadImg: "/src/assets/mascot_dora_sad.webp", 
     color: "#00d2ff" 
   }
 ];
@@ -596,7 +598,13 @@ export default function SwipeWise() {
                   style={{ borderColor: m.color }}
                 >
                   <div className="sw-mascot-img-container">
-                    <img src={resolveAssetUrl(m.img)} alt={m.name} className="sw-mascot-select-img" />
+                    <img
+                      src={resolveAssetUrl(m.img)}
+                      alt={m.name}
+                      className="sw-mascot-select-img"
+                      decoding="async"
+                      loading="eager"
+                    />
                   </div>
                   <div className="sw-mascot-name" style={{ color: m.color, fontWeight: "bold", marginTop: "10px" }}>{m.name}</div>
                 </motion.div>
@@ -693,7 +701,13 @@ export default function SwipeWise() {
 
                     {deck[ci].image && (
                       <div className="sw-card-media">
-                        <img src={resolveAssetUrl(deck[ci].image)} alt="Evidence" className="sw-media-img" />
+                        <img
+                          src={resolveAssetUrl(deck[ci].image)}
+                          alt="Evidence"
+                          className="sw-media-img"
+                          decoding="async"
+                          loading="lazy"
+                        />
                       </div>
                     )}
 
@@ -701,9 +715,11 @@ export default function SwipeWise() {
                       <div className="sw-card-media">
                         <video 
                           src={resolveAssetUrl(deck[ci].video)} 
+                          preload="metadata"
+                          playsInline
                           controls 
                           className="sw-media-video"
-                          poster={resolveAssetUrl(deck[ci].image)}
+                          poster={resolveAssetUrl(deck[ci].image) || DEFAULT_VIDEO_POSTER}
                           ref={activeVideoRef}
                         />
                       </div>
