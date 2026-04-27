@@ -24,7 +24,7 @@ const resolveAssetUrl = (v) => {
   return ASSETS_BY_NAME[v] || v;
 };
 
-const DEFAULT_VIDEO_POSTER = resolveAssetUrl("/src/assets/hero.png");
+const DEFAULT_VIDEO_POSTER = "";
 
 const CARDS = [
  {
@@ -32,7 +32,7 @@ const CARDS = [
   category: "Investment Scams",
   type: "scam",
   profileName: "WealthMax Trading",
-  avatar: "📈",
+  avatar: "logo.png",
   tag: "Sponsored",
   verified: false,
   stats: { likes: "1.2k", comments: "428", shares: "125" },
@@ -250,6 +250,7 @@ const CARDS = [
   stats: { likes: "4276", comments: "118", shares: "116" },
   content: "WATCH: Amitabh Bachchan personally endorses this investment platform and shares how he turned ₹10,000 into ₹5 lakhs in 30 days! Click the link in bio to join — he says hurry, offer closes tonight!",
   video: "/src/assets/q12_bachchan.mp4",
+  poster: "/src/assets/q12_bachchan_poster.png",
   redFlags: [
    "Celebrity deepfake endorsement",
    "Unrealistic returns (₹10k to ₹5L in 30 days)",
@@ -424,6 +425,7 @@ export default function SwipeWise() {
   const [maxStreak, setMaxStreak] = useState(0);
   const [cardStart, setCardStart] = useState(null);
   const [times, setTimes] = useState([]);
+  const [activeProfileTab, setActiveProfileTab] = useState("activity");
   const activeVideoRef = useRef(null);
 
   // Motion values for swiping
@@ -539,9 +541,17 @@ export default function SwipeWise() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
-            <div className="sw-shield-icon">🛡️</div>
-            <h1 className="sw-title">SwipeWise</h1>
-            <div className="sw-subtitle">BY SEBI × IOSCO TECHSPRINT</div>
+            <div className="sw-shield-icon">
+              <img
+                src={resolveAssetUrl("logo.png")}
+                alt="SwipeWise Logo"
+                style={{ width: 380, height: 140, objectFit: "contain", marginBottom: 0 }}
+              />
+            </div>
+            {/* <h1 className="sw-title">SwipeWise</h1> */}
+            <div className="sw-subtitle" style={{ marginTop: "4px", marginBottom: "12px" }}>
+              BY SEBI × IOSCO TECHSPRINT
+            </div>
 
             <div className="sw-glass-card">
               <h2 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "10px" }}>Test Your Trust Index</h2>
@@ -673,7 +683,17 @@ export default function SwipeWise() {
                     <motion.div className="sw-swipe-label" style={{ left: 20, color: "var(--scam-color)", opacity: scamOpacity }}>SCAM</motion.div>
 
                     <div className="sw-post-header">
-                      <div className="sw-avatar">{deck[ci].avatar}</div>
+                      <div className="sw-avatar">
+                        {typeof deck[ci].avatar === "string" && deck[ci].avatar.match(/\.(png|jpe?g|webp|svg)$/i) ? (
+                          <img
+                            src={resolveAssetUrl(deck[ci].avatar)}
+                            alt="Logo"
+                            style={{ width: 40, height: 40, objectFit: "contain" }}
+                          />
+                        ) : (
+                          deck[ci].avatar
+                        )}
+                      </div>
                       <div className="sw-profile-info">
                         <div className="sw-profile-name">{deck[ci].profileName}</div>
                         <div className="sw-profile-verified">
@@ -715,11 +735,12 @@ export default function SwipeWise() {
                       <div className="sw-card-media">
                         <video 
                           src={resolveAssetUrl(deck[ci].video)} 
-                          preload="metadata"
+                          preload="auto"
+                          muted
                           playsInline
                           controls 
                           className="sw-media-video"
-                          poster={resolveAssetUrl(deck[ci].image) || DEFAULT_VIDEO_POSTER}
+                          poster={deck[ci].poster ? resolveAssetUrl(deck[ci].poster) : undefined}
                           ref={activeVideoRef}
                         />
                       </div>
@@ -863,12 +884,29 @@ export default function SwipeWise() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
           >
-            <div className="sw-score-header">
-              <span>YOUR RESULTS</span>
-              <h1 className="sw-title">SwipeWise</h1>
+            {/* <motion.button
+              className="sw-share-button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setScreen("profile")}
+              style={{ marginTop: "12px" }}
+            >
+              👤 View Profile
+            </motion.button> */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "12px" }}>
+              <img
+                src={resolveAssetUrl("logo.png")}
+                alt="SwipeWise Logo"
+                style={{ height: "80px", objectFit: "contain" }}
+              />
             </div>
+            
 
             <div className="sw-main-score-card">
+              <div className="sw-score-header">
+              <span>YOUR RESULTS</span>
+              {/* <h1 className="sw-title">SwipeWise</h1> */}
+            </div>
               <div className="sw-trust-label">TRUST INDEX</div>
               <div className="sw-trust-value" style={{ color: getTitleColor(trustIndex) }}>{trustIndex}</div>
               <div className="sw-trust-max">/100</div>
@@ -928,14 +966,27 @@ export default function SwipeWise() {
               </div>
             </div>
 
-            <motion.button
-              className="sw-share-button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setScreen("share")}
-            >
-              📤 Share Your Score
-            </motion.button>
+            <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+              <motion.button
+                className="sw-share-button"
+                style={{ flex: "1" }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setScreen("profile")}
+              >
+                👤 Profile
+              </motion.button>
+
+              <motion.button
+                className="sw-share-button"
+                style={{ flex: "3" }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setScreen("share")}
+              >
+                📤 Share Your Score
+              </motion.button>
+            </div>
 
             <button
               className="sw-play-again-btn"
@@ -1003,6 +1054,256 @@ export default function SwipeWise() {
             <button className="sw-back-link" onClick={() => setScreen("score")}>
               ← Back to Scorecard
             </button>
+          </motion.div>
+        )}
+        {screen === "profile" && (
+          <motion.div
+            key="profile"
+            className="sw-score-screen"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
+                <img
+                  src={resolveAssetUrl("logo.png")}
+                  alt="SwipeWise Logo"
+                  style={{ height: "60px", objectFit: "contain" }}
+                />
+              </div>
+            {/* Header Bar */}
+            <div className="sw-section-card" style={{ padding: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              
+              <div style={{ fontWeight: "600", fontSize: "13px", color: "var(--text-secondary)" }}>
+                @true_detective_1835
+              </div>
+            </div>
+                
+            {/* Avatar Section with Gradient */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "20px" }}>
+              <div
+                style={{
+                  width: "90px",
+                  height: "90px",
+                  borderRadius: "50%",
+                  background: "linear-gradient(135deg, #7b2ff7 0%, #00d2ff 100%)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "36px",
+                  boxShadow: "0 8px 32px rgba(123, 47, 247, 0.3)",
+                  marginBottom: "12px"
+                }}
+              >
+                🛡️
+              </div>
+              
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "24px", fontWeight: "800", marginBottom: "4px" }}>
+                  @true_detective_1835
+                </div>
+                <div style={{ 
+                  fontSize: "12px", 
+                  opacity: 0.8,
+                  background: "linear-gradient(90deg, #ffd700, #ffaa00)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  fontWeight: "700"
+                }}>
+                  🏅 Sage Level
+                </div>
+              </div>
+            </div>
+              
+            {/* Stats Row - Enhanced */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-around",
+                marginBottom: "24px",
+                padding: "16px 0",
+                borderTop: "1px solid rgba(255,255,255,0.1)",
+                borderBottom: "1px solid rgba(255,255,255,0.1)"
+              }}
+            >
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "22px", fontWeight: "800", color: "#7b2ff7" }}>{trustIndex}</div>
+                <div style={{ fontSize: "11px", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.5px" }}>Trust Index</div>
+              </div>
+              <div style={{ width: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "22px", fontWeight: "800", color: "#00d2ff" }}>26</div>
+                <div style={{ fontSize: "11px", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.5px" }}>Contributions</div>
+              </div>
+              <div style={{ width: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "22px", fontWeight: "800", color: "#2ed573" }}>1y</div>
+                <div style={{ fontSize: "11px", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.5px" }}>Account Age</div>
+              </div>
+            </div>
+            
+            {/* Tabs - Enhanced */}
+            
+            <div className="sw-section-card" style={{ padding: "16px" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "20px",
+                borderBottom: "1px solid rgba(255,255,255,0.1)",
+                paddingBottom: "12px",
+                marginBottom: "16px",
+                fontWeight: "600",
+                cursor: "pointer"
+              }}
+            >
+              <span
+                onClick={() => setActiveProfileTab("activity")}
+                style={{ 
+                  opacity: activeProfileTab === "activity" ? 1 : 0.5,
+                  paddingBottom: "8px",
+                  borderBottom: activeProfileTab === "activity" ? "2px solid #7b2ff7" : "2px solid transparent",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                Activity
+              </span>
+              <span
+                onClick={() => setActiveProfileTab("achievements")}
+                style={{ 
+                  opacity: activeProfileTab === "achievements" ? 1 : 0.5,
+                  paddingBottom: "8px",
+                  borderBottom: activeProfileTab === "achievements" ? "2px solid #7b2ff7" : "2px solid transparent",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                Achievements
+              </span>
+              <span
+                onClick={() => setActiveProfileTab("about")}
+                style={{ 
+                  opacity: activeProfileTab === "about" ? 1 : 0.5,
+                  paddingBottom: "8px",
+                  borderBottom: activeProfileTab === "about" ? "2px solid #7b2ff7" : "2px solid transparent",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                About
+              </span>
+            </div>
+            
+            {/* Activity Section */}
+            {activeProfileTab === "activity" && (
+              <div style={{ padding: "12px 0" }}>
+                <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                  📊 Recent Activity
+                </div>
+                <div style={{ 
+                  background: "rgba(123, 47, 247, 0.1)", 
+                  borderRadius: "12px", 
+                  padding: "16px",
+                  border: "1px solid rgba(123, 47, 247, 0.2)",
+                  marginBottom: "12px"
+                }}>
+                  <div style={{ fontSize: "14px", fontWeight: "600", marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Scam Detection Test</span>
+                    <span style={{ fontSize: "11px", opacity: 0.6, background: "rgba(255,255,255,0.1)", padding: "4px 8px", borderRadius: "8px" }}>
+                      {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "13px", opacity: 0.8, marginBottom: "12px" }}>
+                    Trust Index: <span style={{ color: "#7b2ff7", fontWeight: "700" }}>{trustIndex}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", fontSize: "12px" }}>
+                    <div style={{ background: "rgba(46,213,115,0.15)", padding: "6px 10px", borderRadius: "8px" }}>
+                      ✓ {answers.filter(a => a.correct).length} Correct
+                    </div>
+                    <div style={{ background: "rgba(255,71,87,0.15)", padding: "6px 10px", borderRadius: "8px" }}>
+                      ✗ {answers.filter(a => !a.correct).length} Wrong
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Quiz Summary */}
+                <div style={{ 
+                  background: "rgba(0, 210, 255, 0.1)", 
+                  borderRadius: "12px", 
+                  padding: "16px",
+                  border: "1px solid rgba(0, 210, 255, 0.2)"
+                }}>
+                  <div style={{ fontSize: "13px", fontWeight: "600", marginBottom: "12px" }}>
+                    📋 Quiz Summary
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "12px" }}>
+                    <div style={{ background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "8px" }}>
+                      <div style={{ opacity: 0.6, marginBottom: "4px" }}>Total Questions</div>
+                      <div style={{ fontWeight: "700", fontSize: "16px" }}>{deck.length}</div>
+                    </div>
+                    <div style={{ background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "8px" }}>
+                      <div style={{ opacity: 0.6, marginBottom: "4px" }}>Accuracy</div>
+                      <div style={{ fontWeight: "700", fontSize: "16px", color: "#2ed573" }}>{answers.length ? Math.round((answers.filter(a => a.correct).length / answers.length) * 100) : 0}%</div>
+                    </div>
+                    <div style={{ background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "8px" }}>
+                      <div style={{ opacity: 0.6, marginBottom: "4px" }}>Best Streak</div>
+                      <div style={{ fontWeight: "700", fontSize: "16px", color: "#ffd700" }}>{maxStreak}</div>
+                    </div>
+                    <div style={{ background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "8px" }}>
+                      <div style={{ opacity: 0.6, marginBottom: "4px" }}>Time Spent</div>
+                      <div style={{ fontWeight: "700", fontSize: "16px" }}>{Math.round(times.reduce((a,b) => a+b, 0)/1000)}s</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeProfileTab === "achievements" && (
+              <div style={{ padding: "12px 0" }}>
+                <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                  🏆 Your Achievements
+                </div>
+                <div style={{ 
+                  background: "linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,170,0,0.1))", 
+                  borderRadius: "12px", 
+                  padding: "16px",
+                  border: "1px solid rgba(255,215,0,0.2)"
+                }}>
+                  <div style={{ fontSize: "16px", marginBottom: "8px" }}>🎉</div>
+                  <div style={{ fontSize: "15px", fontWeight: "600", marginBottom: "4px" }}>
+                    Congratulations!
+                  </div>
+                  <div style={{ fontSize: "13px", opacity: 0.7 }}>
+                    You unlocked access to a new exclusive podcast by Finance Guru.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeProfileTab === "about" && (
+              <div style={{ padding: "12px 0" }}>
+                <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                  ℹ️ About SwipeWise
+                </div>
+                <div style={{ 
+                  background: "rgba(0, 210, 255, 0.1)", 
+                  borderRadius: "12px", 
+                  padding: "16px",
+                  border: "1px solid rgba(0, 210, 255, 0.2)"
+                }}>
+                  <div style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: "1.6" }}>
+                    SwipeWise helps users detect scams through interactive swipe-based learning and Trust Index scoring. Learn to identify investment fraud, phishing attempts, and impersonation scams.
+                  </div>
+                </div>
+              </div>
+            )}
+            </div>
+            </div>
+            <button
+              className="sw-back-link"
+              onClick={() => setScreen("score")}
+              style={{ marginTop: "20px", fontSize: "14px" }}
+            >
+              ← Back to Scorecard
+            </button>
+            
           </motion.div>
         )}
       </AnimatePresence>
