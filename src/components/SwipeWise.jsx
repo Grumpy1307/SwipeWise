@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import "./SwipeWise.css";
 
@@ -321,6 +321,30 @@ const MASCOTS = [
 
 const getNow = () => performance.now();
 
+const GAME_QUESTION_COUNT = 10;
+const isMediaCard = (c) => Boolean(c?.image || c?.video);
+
+const shuffle = (arr) => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+const buildGameDeck = () => {
+  const media = CARDS.filter(isMediaCard);
+  if (media.length >= GAME_QUESTION_COUNT) {
+    return shuffle(media).slice(0, GAME_QUESTION_COUNT);
+  }
+
+  const others = CARDS.filter((c) => !isMediaCard(c));
+  const needed = GAME_QUESTION_COUNT - media.length;
+  const pickedOthers = shuffle(others).slice(0, needed);
+  return shuffle([...media, ...pickedOthers]);
+};
+
 const RadarChart = ({ cats, scores, color }) => {
   const cx = 100, cy = 100, r = 70;
   const angles = cats.map((_, i) => (Math.PI * 2 * i) / cats.length - Math.PI / 2);
@@ -389,6 +413,7 @@ const RadarChart = ({ cats, scores, color }) => {
 export default function SwipeWise() {
   const [screen, setScreen] = useState("intro");
   const [selectedMascot, setSelectedMascot] = useState(null);
+  const [deck, setDeck] = useState([]);
   const [ci, setCi] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [showReveal, setShowReveal] = useState(false);
@@ -397,6 +422,7 @@ export default function SwipeWise() {
   const [maxStreak, setMaxStreak] = useState(0);
   const [cardStart, setCardStart] = useState(null);
   const [times, setTimes] = useState([]);
+  const activeVideoRef = useRef(null);
 
   // Motion values for swiping
   const x = useMotionValue(0);
@@ -411,13 +437,34 @@ export default function SwipeWise() {
 
   const handleMascotSelect = (mascot) => {
     setSelectedMascot(mascot);
+    setDeck(buildGameDeck());
+    setCi(0);
+    setAnswers([]);
+    setTimes([]);
+    setShowReveal(false);
+    setLastAnswer(null);
+    setStreak(0);
+    setMaxStreak(0);
+    x.set(0);
     setScreen("game");
     setCardStart(getNow());
   };
 
+  const stopActiveVideo = useCallback(() => {
+    const v = activeVideoRef.current;
+    if (!v) return;
+    try {
+      v.pause();
+      v.currentTime = 0;
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const handleSwipe = useCallback((dir) => {
     if (showReveal) return;
-    const card = CARDS[ci];
+    stopActiveVideo();
+    const card = deck[ci];
     const userSays = dir === "left" ? "scam" : "legit";
     const correct = userSays === card.type;
     const t = Math.round(getNow() - cardStart);
@@ -436,23 +483,24 @@ export default function SwipeWise() {
       setStreak(0);
     }
     setShowReveal(true);
-  }, [ci, showReveal, cardStart]);
+  }, [ci, showReveal, cardStart, deck, stopActiveVideo]);
 
   const handleNext = useCallback(() => {
+    stopActiveVideo();
     setShowReveal(false);
     setLastAnswer(null);
     x.set(0);
-    if (ci + 1 >= CARDS.length) {
+    if (ci + 1 >= deck.length) {
       setScreen("score");
     } else {
       setCi(c => c + 1);
       setCardStart(getNow());
     }
-  }, [ci, x]);
+  }, [ci, x, deck.length, stopActiveVideo]);
 
   // Calculations
   const stats = useMemo(() => {
-    const totalQuestions = CARDS.length;
+    const totalQuestions = deck.length || GAME_QUESTION_COUNT;
     const correctAnswers = answers.filter((a) => a.correct).length;
     const accuracy = answers.length ? Math.round((correctAnswers / answers.length) * 100) : 0;
     
@@ -461,7 +509,7 @@ export default function SwipeWise() {
     const speedScore = Math.max(0, Math.min(100, Math.round(100 - (Math.max(0, avgTime - 3000) / 120))));
     
     // Streak Score: linear reward up to total questions
-    const streakScore = Math.min(100, Math.round((maxStreak / totalQuestions) * 100));
+    const streakScore = totalQuestions ? Math.min(100, Math.round((maxStreak / totalQuestions) * 100)) : 0;
 
     // Trust Index = 80% Accuracy + 10% Streak + 10% Speed
     // This ensures accuracy is the primary driver of trust
@@ -474,7 +522,7 @@ export default function SwipeWise() {
     });
 
     return { accuracy, trustIndex, catScores, correctCount: correctAnswers };
-  }, [answers, times, maxStreak]);
+  }, [answers, times, maxStreak, deck.length]);
 
   const { accuracy, trustIndex, catScores, correctCount } = stats;
 
@@ -547,7 +595,7 @@ export default function SwipeWise() {
                   onClick={() => handleMascotSelect(m)}
                   style={{ borderColor: m.color }}
                 >
-                  <div className={`sw-mascot-img-container${m.id === "naruto" ? " sw-mascot-img-container--sm" : ""}`}>
+                  <div className="sw-mascot-img-container">
                     <img src={resolveAssetUrl(m.img)} alt={m.name} className="sw-mascot-select-img" />
                   </div>
                   <div className="sw-mascot-name" style={{ color: m.color, fontWeight: "bold", marginTop: "10px" }}>{m.name}</div>
@@ -575,7 +623,7 @@ export default function SwipeWise() {
           >
             <div className="sw-game-header">
               <div className="sw-progress-bar">
-                {CARDS.map((_, i) => (
+                {deck.map((_, i) => (
                   <div
                     key={i}
                     className="sw-progress-segment"
@@ -593,7 +641,7 @@ export default function SwipeWise() {
                 ))}
               </div>
               <div className="sw-header-stats">
-                <span>{ci + 1} / {CARDS.length}</span>
+                <span>{ci + 1} / {deck.length}</span>
                 <span>Streak: {streak}</span>
               </div>
             </div>
@@ -602,7 +650,7 @@ export default function SwipeWise() {
               <AnimatePresence mode="wait">
                 {!showReveal ? (
                   <motion.div
-                    key={CARDS[ci].id}
+                    key={deck[ci]?.id}
                     className="sw-card"
                     style={{ x, rotate, opacity }}
                     drag="x"
@@ -617,53 +665,54 @@ export default function SwipeWise() {
                     <motion.div className="sw-swipe-label" style={{ left: 20, color: "var(--scam-color)", opacity: scamOpacity }}>SCAM</motion.div>
 
                     <div className="sw-post-header">
-                      <div className="sw-avatar">{CARDS[ci].avatar}</div>
+                      <div className="sw-avatar">{deck[ci].avatar}</div>
                       <div className="sw-profile-info">
-                        <div className="sw-profile-name">{CARDS[ci].profileName}</div>
+                        <div className="sw-profile-name">{deck[ci].profileName}</div>
                         <div className="sw-profile-verified">
-                          {CARDS[ci].verified ? "✓ Verified" : "Unverified"}
+                          {deck[ci].verified ? "✓ Verified" : "Unverified"}
                         </div>
                       </div>
                       <span
                         className="sw-tag"
                         style={{
                           background:
-                            CARDS[ci].tag === "Sponsored" || CARDS[ci].tag === "Ad"
+                            deck[ci].tag === "Sponsored" || deck[ci].tag === "Ad"
                               ? "rgba(255,71,87,0.1)"
                               : "rgba(46,213,115,0.1)",
                           color:
-                            CARDS[ci].tag === "Sponsored" || CARDS[ci].tag === "Ad"
+                            deck[ci].tag === "Sponsored" || deck[ci].tag === "Ad"
                               ? "var(--scam-color)"
                               : "var(--legit-color)",
                         }}
                       >
-                        {CARDS[ci].tag}
+                        {deck[ci].tag}
                       </span>
                     </div>
 
-                    <div className="sw-content">{CARDS[ci].content}</div>
+                    <div className="sw-content">{deck[ci].content}</div>
 
-                    {CARDS[ci].image && (
+                    {deck[ci].image && (
                       <div className="sw-card-media">
-                        <img src={resolveAssetUrl(CARDS[ci].image)} alt="Evidence" className="sw-media-img" />
+                        <img src={resolveAssetUrl(deck[ci].image)} alt="Evidence" className="sw-media-img" />
                       </div>
                     )}
 
-                    {CARDS[ci].video && (
+                    {deck[ci].video && (
                       <div className="sw-card-media">
                         <video 
-                          src={resolveAssetUrl(CARDS[ci].video)} 
+                          src={resolveAssetUrl(deck[ci].video)} 
                           controls 
                           className="sw-media-video"
-                          poster={resolveAssetUrl(CARDS[ci].image)}
+                          poster={resolveAssetUrl(deck[ci].image)}
+                          ref={activeVideoRef}
                         />
                       </div>
                     )}
 
                     <div className="sw-post-stats">
-                      <span>❤️ {CARDS[ci].stats.likes}</span>
-                      <span>💬 {CARDS[ci].stats.comments}</span>
-                      <span>↗ {CARDS[ci].stats.shares}</span>
+                      <span>❤️ {deck[ci].stats.likes}</span>
+                      <span>💬 {deck[ci].stats.comments}</span>
+                      <span>↗ {deck[ci].stats.shares}</span>
                     </div>
                   </motion.div>
                 ) : (
@@ -682,17 +731,17 @@ export default function SwipeWise() {
                       }}
                     >
                       <div className="sw-reveal-status">{lastAnswer.correct ? "✅ Correct!" : "❌ Wrong!"}</div>
-                      <div className="sw-reveal-type">This was: {CARDS[ci].type === "scam" ? "A SCAM" : "LEGITIMATE"}</div>
-                      
-                      {CARDS[ci].redFlags.length > 0 && (
+                      <div className="sw-reveal-type">This was: {deck[ci].type === "scam" ? "A SCAM" : "LEGITIMATE"}</div>
+
+                      {deck[ci].redFlags.length > 0 && (
                         <ul className="sw-red-flags">
-                          {CARDS[ci].redFlags.map((f, i) => (
+                          {deck[ci].redFlags.map((f, i) => (
                             <li key={i} className="sw-red-flag-item">{f}</li>
                           ))}
                         </ul>
                       )}
-                      
-                      <div className="sw-explanation">{CARDS[ci].explanation}</div>
+
+                      <div className="sw-explanation">{deck[ci].explanation}</div>
                       <div style={{ 
                         marginTop: "24px", 
                         paddingTop: "16px",
@@ -823,7 +872,7 @@ export default function SwipeWise() {
                   <span className="sw-stat-label">Best Streak</span>
                 </div>
                 <div className="sw-stat-box">
-                  <span className="sw-stat-val" style={{ color: "var(--legit-color)" }}>{correctCount}/{CARDS.length}</span>
+                  <span className="sw-stat-val" style={{ color: "var(--legit-color)" }}>{correctCount}/{deck.length}</span>
                   <span className="sw-stat-label">Correct</span>
                 </div>
               </div>
