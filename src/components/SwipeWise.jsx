@@ -2,9 +2,17 @@ import { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import "./SwipeWise.css";
 
-const ASSET_URLS = import.meta.glob("../assets/*", { eager: true, as: "url" });
+const ASSET_URLS = import.meta.glob("../assets/*", {
+  eager: true,
+  query: "?url",
+  import: "default",
+});
 const ASSETS_BY_NAME = Object.fromEntries(
-  Object.entries(ASSET_URLS).map(([p, url]) => [p.split("/").pop(), url])
+  Object.entries(ASSET_URLS).map(([p, v]) => {
+    const name = p.split("/").pop();
+    const url = typeof v === "string" ? v : v?.default;
+    return [name, url];
+  })
 );
 
 const resolveAssetUrl = (v) => {
