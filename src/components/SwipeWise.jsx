@@ -515,7 +515,7 @@ export default function SwipeWise() {
     // Streak Score: linear reward up to total questions
     const streakScore = totalQuestions ? Math.min(100, Math.round((maxStreak / totalQuestions) * 100)) : 0;
 
-    // Trust Index = 80% Accuracy + 10% Streak + 10% Speed
+    // Awareness Index = 80% Accuracy + 10% Streak + 10% Speed
     // This ensures accuracy is the primary driver of trust
     const trustIndex = Math.round((accuracy * 0.8) + (streakScore * 0.1) + (speedScore * 0.1));
     
@@ -554,7 +554,7 @@ export default function SwipeWise() {
             </div>
 
             <div className="sw-glass-card">
-              <h2 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "10px" }}>Test Your Trust Index</h2>
+              <h2 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "10px" }}>Test Your Awareness Index</h2>
               <p style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
                 Can you spot scams before they trap you?
               </p>
@@ -907,7 +907,7 @@ export default function SwipeWise() {
               <span>YOUR RESULTS</span>
               {/* <h1 className="sw-title">SwipeWise</h1> */}
             </div>
-              <div className="sw-trust-label">TRUST INDEX</div>
+              <div className="sw-trust-label">Awareness Index</div>
               <div className="sw-trust-value" style={{ color: getTitleColor(trustIndex) }}>{trustIndex}</div>
               <div className="sw-trust-max">/100</div>
               
@@ -1021,7 +1021,7 @@ export default function SwipeWise() {
               <div className="sw-share-score" style={{ color: getTitleColor(trustIndex) }}>
                 {trustIndex}
               </div>
-              <div className="sw-share-label">TRUST INDEX</div>
+              <div className="sw-share-label">Awareness Index</div>
               
               <div className="sw-share-badge" style={{ color: getTitleColor(trustIndex) }}>
                 <span>{getTitleEmoji(trustIndex)}</span>
@@ -1040,7 +1040,7 @@ export default function SwipeWise() {
               </div>
               
               <div className="sw-share-promo">
-                <div className="sw-share-promo-text">Can you beat my Trust Index? 🏆</div>
+                <div className="sw-share-promo-text">Can you beat my Awareness Index? 🏆</div>
                 <div className="sw-share-promo-sub">Play SwipeWise — Swipe left on scams!</div>
               </div>
             </div>
@@ -1128,7 +1128,7 @@ export default function SwipeWise() {
             >
               <div style={{ textAlign: "center" }}>
                 <div style={{ fontSize: "22px", fontWeight: "800", color: "#7b2ff7" }}>{trustIndex}</div>
-                <div style={{ fontSize: "11px", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.5px" }}>Trust Index</div>
+                <div style={{ fontSize: "11px", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.5px" }}>Awareness Index</div>
               </div>
               <div style={{ width: "1px", background: "rgba(255,255,255,0.1)" }}></div>
               <div style={{ textAlign: "center" }}>
@@ -1211,7 +1211,7 @@ export default function SwipeWise() {
                     </span>
                   </div>
                   <div style={{ fontSize: "13px", opacity: 0.8, marginBottom: "12px" }}>
-                    Trust Index: <span style={{ color: "#7b2ff7", fontWeight: "700" }}>{trustIndex}</span>
+                    Awareness Index: <span style={{ color: "#7b2ff7", fontWeight: "700" }}>{trustIndex}</span>
                   </div>
                   <div style={{ display: "flex", gap: "12px", fontSize: "12px" }}>
                     <div style={{ background: "rgba(46,213,115,0.15)", padding: "6px 10px", borderRadius: "8px" }}>
@@ -1289,7 +1289,7 @@ export default function SwipeWise() {
                   border: "1px solid rgba(0, 210, 255, 0.2)"
                 }}>
                   <div style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: "1.6" }}>
-                    SwipeWise helps users detect scams through interactive swipe-based learning and Trust Index scoring. Learn to identify investment fraud, phishing attempts, and impersonation scams.
+                    SwipeWise helps users detect scams through interactive swipe-based learning and Awareness Index scoring. Learn to identify investment fraud, phishing attempts, and impersonation scams.
                   </div>
                 </div>
               </div>
