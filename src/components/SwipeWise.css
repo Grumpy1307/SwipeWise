@@ -45,7 +45,9 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   justify-content: space-between;
+  overflow: hidden;
 }
 
 .sw-intro, .sw-topic-screen, .sw-game {
@@ -1376,4 +1378,94 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
   20%, 80% { transform: translate3d(2px, 0, 0); }
   30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
   40%, 60% { transform: translate3d(4px, 0, 0); }
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 480px) {
+  .sw-content-wrapper {
+    padding: 12px;
+  }
+
+  .sw-title {
+    font-size: 32px;
+  }
+
+  .sw-shield-icon {
+    font-size: 60px;
+    margin-bottom: 24px;
+  }
+
+  .sw-glass-card {
+    padding: 20px;
+    border-radius: 20px;
+  }
+
+  .sw-card-container {
+    min-height: 420px;
+  }
+
+  .sw-card {
+    max-height: 500px;
+    border-radius: 24px;
+  }
+
+  .sw-card-body {
+    padding: 0 16px;
+  }
+
+  .sw-wisebot-btn-container {
+    padding: 0 16px 16px;
+  }
+
+  .sw-active-mascot {
+    transform: scale(0.75);
+    bottom: 5px;
+    right: 5px;
+  }
+
+  .sw-mascot-bubble {
+    font-size: 11px;
+    padding: 6px 12px;
+  }
+
+  .sw-trust-value {
+    font-size: 60px;
+  }
+
+  .sw-stat-val {
+    font-size: 18px;
+  }
+
+  .sw-stat-label {
+    font-size: 10px;
+  }
+
+  .sw-topic-grid {
+    max-height: 60vh;
+  }
+
+  .sw-wisebot-modal {
+    padding: 24px 20px 40px 20px;
+  }
+
+  .sw-wisebot-header {
+    padding: 16px 20px;
+  }
+
+  .sw-wisebot-body {
+    padding: 20px;
+  }
+}
+
+@media (max-height: 700px) {
+  .sw-card-container {
+    min-height: 380px;
+  }
+  .sw-card {
+    max-height: 460px;
+  }
+  .sw-shield-icon {
+    font-size: 40px;
+    margin-bottom: 20px;
+  }
 }
