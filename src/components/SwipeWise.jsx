@@ -558,23 +558,28 @@ Output strictly in JSON format:
 Message:
 "${card.content}"`;
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { response_mime_type: "application/json" }
+          contents: [{ parts: [{ text: prompt }] }]
         })
       });
 
-      if (!res.ok) throw new Error("API request failed");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Gemini API Error:", errorData);
+        throw new Error(`API request failed (Status: ${res.status}). ${errorData.error?.message || ""}`);
+      }
       
       const data = await res.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!textResponse) throw new Error("Empty response from WiseBot");
       
-      const jsonStr = textResponse.replace(/```json\n?|\n?```/g, "").trim();
-      const parsed = JSON.parse(jsonStr);
+      // Extract JSON from markdown or raw text
+      const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Could not find analysis data in WiseBot response.");
+      const parsed = JSON.parse(jsonMatch[0]);
       
       wiseBotCacheRef.current[card.id] = parsed;
       setWiseBotResponse(parsed);

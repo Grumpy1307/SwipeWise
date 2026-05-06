@@ -1255,10 +1255,11 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
 /* Top App Bar & Navigation */
 .sw-top-app-bar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  padding-top: 10px;
-  margin-bottom: 20px;
+  padding-top: env(safe-area-inset-top, 20px);
+  margin-bottom: 12px;
+  width: 100%;
 }
 
 .sw-home-icon-btn {
@@ -1383,53 +1384,56 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
 /* Mobile Responsiveness */
 @media (max-width: 480px) {
   .sw-content-wrapper {
-    padding: 12px;
+    padding: 10px 16px;
   }
 
   .sw-title {
-    font-size: 32px;
+    font-size: 28px;
   }
 
   .sw-shield-icon {
-    font-size: 60px;
-    margin-bottom: 24px;
+    font-size: 50px;
+    margin-bottom: 16px;
   }
 
   .sw-glass-card {
-    padding: 20px;
+    padding: 16px;
     border-radius: 20px;
   }
 
   .sw-card-container {
-    min-height: 420px;
+    min-height: 360px;
+    margin: 0 auto;
   }
 
   .sw-card {
-    max-height: 500px;
-    border-radius: 24px;
+    max-height: 420px;
+    border-radius: 20px;
   }
 
   .sw-card-body {
-    padding: 0 16px;
+    padding: 0 12px;
+  }
+
+  .sw-content {
+    font-size: 14px;
+    line-height: 1.5;
   }
 
   .sw-wisebot-btn-container {
-    padding: 0 16px 16px;
+    padding: 0 12px 12px;
   }
 
   .sw-active-mascot {
-    transform: scale(0.75);
-    bottom: 5px;
-    right: 5px;
+    transform: scale(0.6);
+    bottom: -10px;
+    right: -10px;
+    z-index: 200;
   }
 
   .sw-mascot-bubble {
-    font-size: 11px;
-    padding: 6px 12px;
-  }
-
-  .sw-trust-value {
-    font-size: 60px;
+    font-size: 10px;
+    padding: 4px 10px;
   }
 
   .sw-stat-val {
@@ -1441,31 +1445,66 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
   }
 
   .sw-topic-grid {
-    max-height: 60vh;
+    max-height: 55vh;
+    padding-bottom: 40px;
+  }
+
+  .sw-learn-btn, .sw-wisebot-btn, .sw-action-btn {
+    padding: 10px 16px;
+    font-size: 14px;
+    border-radius: 12px;
+  }
+
+  .sw-mascot-img-container {
+    width: 100px;
+    height: 100px;
+  }
+
+  .sw-active-mascot-img-container {
+    width: 140px;
+    height: 140px;
+  }
+
+  .sw-active-mascot-img-container--sm {
+    width: 110px;
+    height: 110px;
   }
 
   .sw-wisebot-modal {
-    padding: 24px 20px 40px 20px;
-  }
-
-  .sw-wisebot-header {
-    padding: 16px 20px;
+    padding-bottom: 30px;
   }
 
   .sw-wisebot-body {
-    padding: 20px;
+    padding: 16px;
+    padding-bottom: 40px;
   }
+}
+
+/* Custom Scrollbar for Cards */
+.sw-card-body::-webkit-scrollbar {
+  width: 4px;
+}
+.sw-card-body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+.sw-card-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
 }
 
 @media (max-height: 700px) {
   .sw-card-container {
-    min-height: 380px;
+    min-height: 340px;
   }
   .sw-card {
-    max-height: 460px;
+    max-height: 400px;
   }
   .sw-shield-icon {
     font-size: 40px;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
+  }
+  .sw-title {
+    font-size: 24px;
   }
 }
