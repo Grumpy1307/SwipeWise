@@ -287,6 +287,20 @@ const getTitle = (s) => (s <= 40 ? "Scam Rookie" : s <= 70 ? "Fraud Detective" :
 const getTitleColor = (s) => (s <= 40 ? "#ff4757" : s <= 70 ? "#ffa502" : "#2ed573");
 const getTitleEmoji = (s) => (s <= 40 ? "⚠️" : s <= 70 ? "🕵️" : "🛡️");
 
+const LEARN_TOPICS = [
+  { id: "beginner", title: "I'm New to Investing", desc: "Beginner guided mode covering basics of scams, fake returns, and phishing.", icon: "🌱", diff: "Beginner" },
+  { id: "basics", title: "Investing Basics", desc: "How markets work, risk vs return, SIPs, and diversification.", icon: "📈", diff: "Beginner" },
+  { id: "scams", title: "Investment Scams", desc: "Guaranteed returns, ponzi schemes, and fake advisors.", icon: "🚨", diff: "Intermediate" },
+  { id: "fno", title: "F&O / Trading Traps", desc: "Leverage risks, Telegram tips, and 'sure-shot' calls.", icon: "⚡", diff: "Advanced" },
+  { id: "phishing", title: "Phishing & KYC Fraud", desc: "Fake bank links, OTP scams, and account blocking threats.", icon: "🔐", diff: "Intermediate" },
+  { id: "deepfakes", title: "Deepfakes & AI Fraud", desc: "Celebrity scams, cloned voices, and fake interviews.", icon: "🤖", diff: "Advanced" },
+  { id: "social", title: "Social Media Fraud", desc: "Instagram scams, WhatsApp groups, and fake influencers.", icon: "💬", diff: "Beginner" },
+  { id: "banking", title: "Banking & Payments", desc: "UPI scams, QR code fraud, and remote access apps.", icon: "🏦", diff: "Intermediate" },
+  { id: "identity", title: "Identity Impersonation", desc: "Fake broker support, SEBI officials, and public figures.", icon: "👤", diff: "Advanced" },
+  { id: "psych", title: "Psychological Manipulation", desc: "Urgency tactics, FOMO, authority bias, and fear-based scams.", icon: "🧠", diff: "Advanced" },
+  { id: "safe", title: "Safe Investing Practices", desc: "SEBI registration checks, secure passwords, and 2FA.", icon: "🛡", diff: "Beginner" }
+];
+
 const MASCOTS = [
   { 
     id: "gem", 
@@ -434,17 +448,38 @@ export default function SwipeWise() {
   const [gameMode, setGameMode] = useState("game");
   const [showHints, setShowHints] = useState(false);
   const [currentConfidence, setCurrentConfidence] = useState(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [isShaking, setIsShaking] = useState(false);
 
   // Motion values for swiping
   const x = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 200], [-25, 25]);
+  const rotate = useTransform(x, [-300, 300], [-35, 35]);
   const opacity = useTransform(x, [-200, -150, 0, 150, 200], [0, 1, 1, 1, 0]);
   const scamOpacity = useTransform(x, [-100, -50], [1, 0]);
   const legitOpacity = useTransform(x, [50, 100], [0, 1]);
 
   const handleModeSelect = useCallback((mode) => {
     setGameMode(mode);
-    setScreen("mascot-select");
+    if (mode === "learn") {
+      setScreen("topic-select");
+    } else {
+      setScreen("mascot-select");
+    }
+  }, []);
+
+  const triggerVibration = useCallback((type = "medium") => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      if (type === "heavy") navigator.vibrate([100]);
+      else if (type === "success") navigator.vibrate([50, 50, 50]);
+      else if (type === "error") navigator.vibrate([100, 50, 100]);
+      else navigator.vibrate(50);
+    }
+  }, []);
+
+  const handleExitHome = useCallback(() => setShowExitConfirm(true), []);
+  const confirmExit = useCallback(() => {
+    setShowExitConfirm(false);
+    setScreen("intro");
   }, []);
 
   const handleMascotSelect = (mascot) => {
@@ -460,7 +495,11 @@ export default function SwipeWise() {
     setStreak(0);
     setMaxStreak(0);
     x.set(0);
-    setScreen("game");
+    if (gameMode === "learn") {
+      setScreen("game");
+    } else {
+      setScreen("tutorial");
+    }
     setCardStart(getNow());
   };
 
@@ -507,23 +546,17 @@ export default function SwipeWise() {
       }
 
       const prompt = `You are a financial fraud detection assistant trained on SEBI guidelines.
-Analyze the following message and classify it as:
-1. Scam or Legit
-2. Confidence level (Low/Medium/High)
-3. Key red flags (bullet points)
-4. Explanation in simple terms
-5. What the user should do
-Message:
-"${card.content}"
-
+Analyze the following message and classify it.
 Output strictly in JSON format:
 {
-  "classification": "Scam",
-  "confidence": "High",
-  "red_flags": ["Guaranteed returns", "Urgency"],
-  "explanation": "No investment guarantees returns...",
-  "action": "Do not click links. Verify via official sources."
-}`;
+  "verdict": "Scam" or "Legit",
+  "confidence": "High" or "Medium" or "Low",
+  "red_flags": ["flag 1", "flag 2"],
+  "tactics": ["Psychological manipulation used", "Urgency"],
+  "action": "What the user should do"
+}
+Message:
+"${card.content}"`;
 
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
         method: "POST",
@@ -559,6 +592,16 @@ Output strictly in JSON format:
     const card = deck[ci];
     const userSays = dir === "left" ? "scam" : "legit";
     const correct = userSays === card.type;
+    
+    // Overconfidence Risk
+    if (!correct && currentConfidence === "high") {
+      triggerVibration("heavy");
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 500);
+    } else {
+      triggerVibration(correct ? "success" : "error");
+    }
+
     const t = Math.round(getNow() - cardStart);
     
     setTimes((p) => [...p, t]);
@@ -632,18 +675,28 @@ Output strictly in JSON format:
     });
     
     const catScores = {};
+    const vulnerabilities = [];
+    const strengths = [];
+    
     CATEGORIES.forEach((cat) => {
       const ca = answeredCards.filter((a) => a.category === cat);
-      catScores[cat] = ca.length ? Math.round((ca.filter((a) => a.correct).length / ca.length) * 100) : 0;
+      if (ca.length > 0) {
+        const score = Math.round((ca.filter((a) => a.correct).length / ca.length) * 100);
+        catScores[cat] = score;
+        if (score <= 50) vulnerabilities.push(cat);
+        else if (score >= 80) strengths.push(cat);
+      } else {
+        catScores[cat] = 0;
+      }
     });
 
-    return { accuracy, trustIndex, catScores, correctCount: correctAnswers, confidenceScore, overconfidenceRisk };
+    return { accuracy, trustIndex, catScores, correctCount: correctAnswers, confidenceScore, overconfidenceRisk, vulnerabilities, strengths };
   }, [answers, times, maxStreak, deck.length, gameMode]);
 
-  const { accuracy, trustIndex, catScores, correctCount, confidenceScore, overconfidenceRisk } = stats;
+  const { accuracy, trustIndex, catScores, correctCount, confidenceScore, overconfidenceRisk, vulnerabilities, strengths } = stats;
 
   return (
-    <div className="sw-container">
+    <div className={`sw-container ${isShaking ? "sw-shake-active" : ""}`}>
       <AnimatePresence mode="wait">
         {screen === "intro" && (
           <motion.div
@@ -716,6 +769,59 @@ Output strictly in JSON format:
           </motion.div>
         )}
 
+        {screen === "topic-select" && (
+          <motion.div
+            key="topic-select"
+            className="sw-content-wrapper sw-topic-screen"
+            layout
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          >
+            <h2 style={{ fontSize: "24px", fontWeight: 800, marginBottom: "20px", textAlign: "center" }}>Choose Learning Path</h2>
+            <div className="sw-topic-grid" style={{ 
+              display: "flex", flexDirection: "column", gap: "12px", 
+              width: "100%", maxHeight: "65vh", overflowY: "auto", 
+              paddingRight: "10px", paddingBottom: "20px" 
+            }}>
+              {LEARN_TOPICS.map(t => (
+                <motion.div
+                  key={t.id}
+                  className="sw-glass-card"
+                  style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    gap: "16px", 
+                    cursor: "pointer", 
+                    padding: "16px", 
+                    textAlign: "left",
+                    width: "100%",
+                    boxSizing: "border-box"
+                  }}
+                  whileHover={{ scale: 1.02, background: "rgba(255,255,255,0.08)" }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setScreen("mascot-select")}
+                >
+                  <div style={{ fontSize: "36px", flexShrink: 0 }}>{t.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                      <h3 style={{ margin: 0, fontSize: "16px" }}>{t.title}</h3>
+                      <span style={{ 
+                        fontSize: "10px", padding: "2px 6px", borderRadius: "8px", 
+                        background: t.diff === "Beginner" ? "rgba(46, 213, 115, 0.2)" : t.diff === "Intermediate" ? "rgba(255, 165, 2, 0.2)" : "rgba(255, 71, 87, 0.2)",
+                        color: t.diff === "Beginner" ? "var(--legit-color)" : t.diff === "Intermediate" ? "#ffa502" : "var(--scam-color)"
+                      }}>{t.diff}</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)" }}>{t.desc}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+            <button className="sw-back-link" onClick={() => setScreen("intro")} style={{ marginTop: "20px" }}>← Back</button>
+          </motion.div>
+        )}
+
         {screen === "mascot-select" && (
           <motion.div
             key="mascot-select"
@@ -765,54 +871,177 @@ Output strictly in JSON format:
           </motion.div>
         )}
 
-        {screen === "game" && (
+        {screen === "tutorial" && (
           <motion.div
-            key="game"
-            className="sw-content-wrapper"
+            key="tutorial"
+            className="sw-content-wrapper sw-intro"
             layout
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
-            <div className="sw-game-header">
-              <div className="sw-progress-bar">
-                {deck.map((_, i) => (
-                  <div
-                    key={i}
-                    className="sw-progress-segment"
-                    style={{
-                      background:
-                        i < ci + (showReveal ? 1 : 0)
-                          ? answers[i]?.correct
-                            ? "var(--legit-color)"
-                            : "var(--scam-color)"
-                          : i === ci && !showReveal
-                          ? "rgba(123,47,247,0.5)"
-                          : "rgba(255,255,255,0.1)",
-                    }}
-                  />
-                ))}
-              </div>
-              <div className="sw-header-stats">
-                <span>{ci + 1} / {deck.length}</span>
-                {gameMode === "game" && <span>Streak: {streak}</span>}
-                {gameMode === "learn" && <span style={{ color: "var(--legit-color)" }}>Learn Mode</span>}
+            <h2 style={{ fontSize: "28px", fontWeight: 800, marginBottom: "20px", color: "var(--legit-color)", textAlign: "center" }}>How to Play</h2>
+            
+            <div style={{ position: "relative", width: "100%", height: "400px", display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "20px" }}>
+              {/* Fake Background Cards */}
+              <div className="sw-card sw-card-behind" style={{ transform: "scale(0.85) translateY(40px)", zIndex: 0, opacity: 0.4, background: "var(--glass-bg)", filter: "blur(4px)" }} />
+              <div className="sw-card sw-card-behind" style={{ transform: "scale(0.92) translateY(20px)", zIndex: 1, opacity: 0.7, background: "var(--glass-bg)" }} />
+              
+              {/* Tutorial Animated Card */}
+              <motion.div 
+                className="sw-card"
+                style={{ zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--glass-bg)", position: "absolute" }}
+                animate={{ 
+                  x: [0, -100, 0, 100, 0],
+                  rotate: [0, -10, 0, 10, 0]
+                }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <div style={{ fontSize: "80px", opacity: 0.5 }}>💳</div>
+                
+                {/* Labels that fade in/out */}
+                <motion.div 
+                  className="sw-swipe-label" 
+                  style={{ left: 20, color: "var(--scam-color)" }}
+                  animate={{ opacity: [0, 1, 0, 0, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  SCAM
+                </motion.div>
+                <motion.div 
+                  className="sw-swipe-label" 
+                  style={{ right: 20, color: "var(--legit-color)" }}
+                  animate={{ opacity: [0, 0, 0, 1, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  LEGIT
+                </motion.div>
+              </motion.div>
+              
+              {/* Hand Icon */}
+              <motion.div
+                style={{ position: "absolute", zIndex: 10, fontSize: "60px", bottom: "40px" }}
+                animate={{ 
+                  x: [0, -100, 0, 100, 0],
+                }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              >
+                👆
+              </motion.div>
+            </div>
+
+            <div style={{ textAlign: "center", marginBottom: "20px" }}>
+              <p style={{ fontSize: "16px", color: "var(--text-secondary)", fontWeight: "600", margin: "0 0 10px 0" }}>
+                Spot scams before they trap you.
+              </p>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "0 20px" }}>
+                <span style={{ color: "var(--scam-color)", fontWeight: "bold", fontSize: "14px" }}>← Scam</span>
+                <span style={{ color: "var(--legit-color)", fontWeight: "bold", fontSize: "14px" }}>Legit →</span>
               </div>
             </div>
 
+            <button 
+              className="sw-start-btn" 
+              onClick={() => setScreen("game")}
+              style={{ width: "100%", padding: "16px", background: "var(--primary-color)", color: "white", borderRadius: "12px", fontSize: "18px", fontWeight: "bold", border: "none", cursor: "pointer", boxShadow: "0 4px 15px rgba(123, 47, 247, 0.4)" }}
+            >
+              Start Playing
+            </button>
+            <button className="sw-back-link" onClick={() => setScreen("mascot-select")} style={{ marginTop: "20px" }}>← Back</button>
+          </motion.div>
+        )}
+
+        {screen === "game" && (
+          <motion.div
+            key="game"
+            className="sw-content-wrapper sw-game"
+            layout
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          >
+            <div className="sw-top-app-bar">
+              <button className="sw-home-icon-btn" onClick={handleExitHome} title="Exit to Home">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+              </button>
+              <div className="sw-game-header" style={{ flex: 1, paddingTop: 0 }}>
+                <div className="sw-progress-bar">
+                  {deck.map((_, i) => (
+                    <div
+                      key={i}
+                      className="sw-progress-segment"
+                      style={{
+                        background:
+                          i < ci + (showReveal ? 1 : 0)
+                            ? answers[i]?.correct
+                              ? "var(--legit-color)"
+                              : "var(--scam-color)"
+                            : i === ci && !showReveal
+                            ? "rgba(123,47,247,0.5)"
+                            : "rgba(255,255,255,0.1)",
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="sw-header-stats">
+                  <span>{ci + 1} / {deck.length}</span>
+                  {gameMode === "game" && <span className={streak >= 3 ? "sw-streak-glow" : ""}>Streak: {streak}</span>}
+                  {gameMode === "learn" && <span style={{ color: "var(--legit-color)" }}>Learn Mode</span>}
+                </div>
+              </div>
+            </div>
+
+            <AnimatePresence>
+              {showExitConfirm && (
+                <motion.div
+                  className="sw-modal-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <motion.div
+                    className="sw-modal-content"
+                    initial={{ scale: 0.9, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.9, y: 20 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  >
+                    <div className="sw-modal-icon">⚠️</div>
+                    <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '24px', margin: '0 0 12px 0' }}>Exit to Home?</h3>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '15px' }}>Are you sure you want to exit? Your current progress will be lost.</p>
+                    <div className="sw-modal-actions">
+                      <button className="sw-modal-btn sw-btn-cancel" onClick={() => setShowExitConfirm(false)}>Resume</button>
+                      <button className="sw-modal-btn sw-btn-confirm" onClick={confirmExit}>Exit Game</button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="sw-card-container">
+              {!showReveal && deck[ci + 2] && (
+                <div className="sw-card sw-card-behind" style={{ transform: "scale(0.90) translateY(40px)", zIndex: 0, opacity: 0.6, background: "var(--glass-bg)", filter: "blur(2px)" }} />
+              )}
+              {!showReveal && deck[ci + 1] && (
+                <div className="sw-card sw-card-behind" style={{ transform: "scale(0.95) translateY(20px)", zIndex: 1, opacity: 0.8, background: "var(--glass-bg)" }} />
+              )}
               <AnimatePresence mode="wait">
                 {!showReveal ? (
                   <motion.div
                     key={deck[ci]?.id}
                     className="sw-card"
-                    style={{ x, rotate, opacity }}
+                    style={{ x, rotate, opacity, zIndex: 2 }}
                     drag={!showReveal ? "x" : false}
                     dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={0.7}
                     onDragEnd={(_, info) => {
-                      if (info.offset.x < -100) handleSwipe("left");
-                      else if (info.offset.x > 100) handleSwipe("right");
+                      if (info.offset.x < -120 || info.velocity.x < -800) handleSwipe("left");
+                      else if (info.offset.x > 120 || info.velocity.x > 800) handleSwipe("right");
                     }}
                     whileDrag={{ cursor: "grabbing" }}
                   >
@@ -854,34 +1083,38 @@ Output strictly in JSON format:
                       </span>
                     </div>
 
-                    <div className="sw-content">{deck[ci].content}</div>
+                    <div className="sw-card-body" style={{ flex: 1, overflowY: "auto", padding: "0 20px", marginBottom: "10px" }}>
+                      <div className="sw-content" style={{ padding: "0 0 16px 0" }}>{deck[ci].content}</div>
 
-                    {deck[ci].image && (
-                      <div className="sw-card-media">
-                        <img
-                          src={resolveAssetUrl(deck[ci].image)}
-                          alt="Evidence"
-                          className="sw-media-img"
-                          decoding="async"
-                          loading="lazy"
-                        />
-                      </div>
-                    )}
+                      {deck[ci].image && (
+                        <div className="sw-card-media" style={{ margin: "0 0 16px 0" }}>
+                          <img
+                            src={resolveAssetUrl(deck[ci].image)}
+                            alt="Evidence"
+                            className="sw-media-img"
+                            decoding="async"
+                            loading="lazy"
+                            style={{ borderRadius: "12px", width: "100%" }}
+                          />
+                        </div>
+                      )}
 
-                    {deck[ci].video && (
-                      <div className="sw-card-media">
-                        <video 
-                          src={resolveAssetUrl(deck[ci].video)} 
-                          preload="auto"
-                          muted
-                          playsInline
-                          controls 
-                          className="sw-media-video"
-                          poster={deck[ci].poster ? resolveAssetUrl(deck[ci].poster) : undefined}
-                          ref={activeVideoRef}
-                        />
-                      </div>
-                    )}
+                      {deck[ci].video && (
+                        <div className="sw-card-media" style={{ margin: "0 0 16px 0" }}>
+                          <video 
+                            src={resolveAssetUrl(deck[ci].video)} 
+                            preload="auto"
+                            muted
+                            playsInline
+                            controls 
+                            className="sw-media-video"
+                            poster={deck[ci].poster ? resolveAssetUrl(deck[ci].poster) : undefined}
+                            ref={activeVideoRef}
+                            style={{ borderRadius: "12px", width: "100%" }}
+                          />
+                        </div>
+                      )}
+                    </div>
 
                     <div className="sw-post-stats">
                       <span>❤️ {deck[ci].stats.likes}</span>
@@ -992,40 +1225,19 @@ Output strictly in JSON format:
               <div className="sw-confidence-selector">
                 <div className="sw-confidence-label">How confident are you? (Optional)</div>
                 <div className="sw-confidence-options">
-                  <button onClick={() => setCurrentConfidence("low")} className={`sw-confidence-btn ${currentConfidence === "low" ? "active" : ""}`}>Low</button>
-                  <button onClick={() => setCurrentConfidence("medium")} className={`sw-confidence-btn ${currentConfidence === "medium" ? "active" : ""}`}>Medium</button>
-                  <button onClick={() => setCurrentConfidence("high")} className={`sw-confidence-btn ${currentConfidence === "high" ? "active" : ""}`}>High</button>
+                  <button onClick={() => setCurrentConfidence("low")} className={`sw-confidence-btn ${currentConfidence === "low" ? "active" : ""}`}>😕 Guessing</button>
+                  <button onClick={() => setCurrentConfidence("medium")} className={`sw-confidence-btn ${currentConfidence === "medium" ? "active" : ""}`}>🤔 Somewhat Sure</button>
+                  <button onClick={() => setCurrentConfidence("high")} className={`sw-confidence-btn ${currentConfidence === "high" ? "active" : ""}`}>😎 Very Confident</button>
                 </div>
               </div>
             )}
-
-            <div className="sw-controls">
-              <motion.button
-                className="sw-action-btn sw-btn-scam"
-                whileHover={!showReveal ? { scale: 1.1 } : {}}
-                whileTap={!showReveal ? { scale: 0.9 } : {}}
-                onClick={() => handleSwipe("left")}
-                disabled={showReveal}
-              >
-                ✕
-              </motion.button>
-              <motion.button
-                className="sw-action-btn sw-btn-legit"
-                whileHover={!showReveal ? { scale: 1.1 } : {}}
-                whileTap={!showReveal ? { scale: 0.9 } : {}}
-                onClick={() => handleSwipe("right")}
-                disabled={showReveal}
-              >
-                ✓
-              </motion.button>
-            </div>
             
-            <div className="sw-hints">
+            <div className="sw-hints" style={{ marginTop: "16px" }}>
               <span>← Swipe Left if Scam</span>
               <span>Swipe Right if Legit →</span>
             </div>
 
-            {selectedMascot && (
+            {selectedMascot && !wiseBotOpen && (
               <motion.div
                 className="sw-active-mascot"
                 initial={{ y: 50, opacity: 0 }}
@@ -1101,7 +1313,7 @@ Output strictly in JSON format:
                       <button className="sw-wisebot-close" onClick={() => setWiseBotOpen(false)}>✕</button>
                     </div>
 
-                    <div className="sw-wisebot-content">
+                    <div className="sw-wisebot-body">
                       {wiseBotLoading ? (
                         <div className="sw-wisebot-loading">
                           <div className="sw-wisebot-spinner"></div>
@@ -1114,22 +1326,17 @@ Output strictly in JSON format:
                       ) : wiseBotResponse ? (
                         <div className="sw-wisebot-result">
                           <div className="sw-wisebot-verdict-row">
-                            <div className={`sw-wisebot-verdict ${wiseBotResponse.classification?.toLowerCase() === 'scam' ? 'sw-wb-scam' : 'sw-wb-legit'}`}>
-                              {wiseBotResponse.classification}
+                            <div className={`sw-wisebot-verdict ${wiseBotResponse.verdict?.toLowerCase() === 'scam' ? 'sw-wb-scam' : 'sw-wb-legit'}`}>
+                              🚨 Verdict: {wiseBotResponse.verdict}
                             </div>
                             <div className="sw-wisebot-confidence">
-                              Confidence: <strong>{wiseBotResponse.confidence}</strong>
+                              🎯 Confidence: <strong>{wiseBotResponse.confidence}</strong>
                             </div>
-                          </div>
-                          
-                          <div className="sw-wisebot-section">
-                            <h4>Explanation</h4>
-                            <p>{wiseBotResponse.explanation}</p>
                           </div>
 
                           {wiseBotResponse.red_flags && wiseBotResponse.red_flags.length > 0 && (
                             <div className="sw-wisebot-section">
-                              <h4>Red Flags 🚩</h4>
+                              <h4>🚩 Red Flags</h4>
                               <ul>
                                 {wiseBotResponse.red_flags.map((rf, idx) => (
                                   <li key={idx}>{rf}</li>
@@ -1138,8 +1345,19 @@ Output strictly in JSON format:
                             </div>
                           )}
 
+                          {wiseBotResponse.tactics && wiseBotResponse.tactics.length > 0 && (
+                            <div className="sw-wisebot-section">
+                              <h4>🧠 Manipulation Tactics Detected</h4>
+                              <ul>
+                                {wiseBotResponse.tactics.map((t, idx) => (
+                                  <li key={idx}>{t}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
                           <div className="sw-wisebot-section sw-wisebot-action">
-                            <h4>What you should do 🛡️</h4>
+                            <h4>✅ What You Should Do</h4>
                             <p>{wiseBotResponse.action}</p>
                           </div>
                         </div>
@@ -1156,7 +1374,7 @@ Output strictly in JSON format:
         {screen === "score" && (
           <motion.div
             key="score"
-            className="sw-score-screen"
+            className="sw-score-screen sw-game"
             layout
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1225,26 +1443,47 @@ Output strictly in JSON format:
             )}
 
             <div className="sw-section-card">
-              <div className="sw-section-title">CATEGORY BREAKDOWN</div>
-              {CATEGORIES.map(cat => {
-                const s = catScores[cat];
-                const clr = s >= 70 ? "var(--legit-color)" : s >= 40 ? "#ffa502" : "var(--scam-color)";
-                return (
-                  <div key={cat} className="sw-cat-row">
-                    <span className="sw-cat-name">{cat}</span>
-                    <div className="sw-cat-bar-container">
-                      <motion.div
-                        className="sw-cat-bar"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${s}%` }}
-                        transition={{ duration: 1, delay: 0.5 }}
-                        style={{ background: clr }}
-                      />
-                    </div>
-                    <span className="sw-cat-pct" style={{ color: clr }}>{s}%</span>
+              <div className="sw-section-title">🧠 COGNITIVE PROFILE</div>
+              
+              {vulnerabilities && vulnerabilities.length > 0 && (
+                <div style={{ marginBottom: "20px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "20px" }}>⚠️</span>
+                    <span style={{ fontWeight: "800", color: "var(--scam-color)", fontSize: "14px" }}>Vulnerability Areas</span>
                   </div>
-                );
-              })}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {vulnerabilities.map(v => (
+                      <span key={v} style={{ background: "rgba(255, 71, 87, 0.2)", color: "var(--scam-color)", padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold" }}>{v}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {strengths && strengths.length > 0 && (
+                <div style={{ marginBottom: "20px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "20px" }}>🏆</span>
+                    <span style={{ fontWeight: "800", color: "var(--legit-color)", fontSize: "14px" }}>Strength Areas</span>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {strengths.map(v => (
+                      <span key={v} style={{ background: "rgba(46, 213, 115, 0.2)", color: "var(--legit-color)", padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold" }}>{v}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "20px" }}>📈</span>
+                  <span style={{ fontWeight: "800", color: "#00d2ff", fontSize: "14px" }}>Improvement Suggestion</span>
+                </div>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0 }}>
+                  {vulnerabilities && vulnerabilities.length > 0 
+                    ? `You should review the Learn Mode modules for ${vulnerabilities.join(" and ")} to improve your defense against these scams.`
+                    : "Excellent work! Keep practicing in Game Mode to maintain your reflexes against new scam variations."}
+                </p>
+              </div>
             </div>
 
             <div className="sw-section-card">
