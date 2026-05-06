@@ -427,6 +427,13 @@ export default function SwipeWise() {
   const [times, setTimes] = useState([]);
   const [activeProfileTab, setActiveProfileTab] = useState("activity");
   const activeVideoRef = useRef(null);
+  const [wiseBotOpen, setWiseBotOpen] = useState(false);
+  const [wiseBotLoading, setWiseBotLoading] = useState(false);
+  const [wiseBotResponse, setWiseBotResponse] = useState(null);
+  const wiseBotCacheRef = useRef({});
+  const [gameMode, setGameMode] = useState("game");
+  const [showHints, setShowHints] = useState(false);
+  const [currentConfidence, setCurrentConfidence] = useState(null);
 
   // Motion values for swiping
   const x = useMotionValue(0);
@@ -435,7 +442,8 @@ export default function SwipeWise() {
   const scamOpacity = useTransform(x, [-100, -50], [1, 0]);
   const legitOpacity = useTransform(x, [50, 100], [0, 1]);
 
-  const handleStart = useCallback(() => {
+  const handleModeSelect = useCallback((mode) => {
+    setGameMode(mode);
     setScreen("mascot-select");
   }, []);
 
@@ -446,6 +454,8 @@ export default function SwipeWise() {
     setAnswers([]);
     setTimes([]);
     setShowReveal(false);
+    setShowHints(false);
+    setCurrentConfidence(null);
     setLastAnswer(null);
     setStreak(0);
     setMaxStreak(0);
@@ -465,6 +475,84 @@ export default function SwipeWise() {
     }
   }, []);
 
+  const handleRevealAnswer = useCallback(() => {
+    if (showReveal) return;
+    stopActiveVideo();
+    const card = deck[ci];
+    const correct = true; // Mark neutral as correct for UI purposes
+    const t = Math.round(getNow() - cardStart);
+    
+    setTimes((p) => [...p, t]);
+    setLastAnswer({ correct, userSays: "revealed", card });
+    setAnswers((p) => [...p, { cardId: card.id, correct: true, category: card.category, time: t, revealed: true, confidence: currentConfidence }]);
+    
+    setShowReveal(true);
+  }, [ci, showReveal, cardStart, deck, stopActiveVideo, currentConfidence]);
+
+  const fetchWiseBotAnalysis = async (card) => {
+    if (wiseBotCacheRef.current[card.id]) {
+      setWiseBotResponse(wiseBotCacheRef.current[card.id]);
+      setWiseBotOpen(true);
+      return;
+    }
+    
+    setWiseBotLoading(true);
+    setWiseBotResponse(null);
+    setWiseBotOpen(true);
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Gemini API key is missing. Please add VITE_GEMINI_API_KEY to your .env file.");
+      }
+
+      const prompt = `You are a financial fraud detection assistant trained on SEBI guidelines.
+Analyze the following message and classify it as:
+1. Scam or Legit
+2. Confidence level (Low/Medium/High)
+3. Key red flags (bullet points)
+4. Explanation in simple terms
+5. What the user should do
+Message:
+"${card.content}"
+
+Output strictly in JSON format:
+{
+  "classification": "Scam",
+  "confidence": "High",
+  "red_flags": ["Guaranteed returns", "Urgency"],
+  "explanation": "No investment guarantees returns...",
+  "action": "Do not click links. Verify via official sources."
+}`;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { response_mime_type: "application/json" }
+        })
+      });
+
+      if (!res.ok) throw new Error("API request failed");
+      
+      const data = await res.json();
+      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!textResponse) throw new Error("Empty response from WiseBot");
+      
+      const jsonStr = textResponse.replace(/```json\n?|\n?```/g, "").trim();
+      const parsed = JSON.parse(jsonStr);
+      
+      wiseBotCacheRef.current[card.id] = parsed;
+      setWiseBotResponse(parsed);
+    } catch (err) {
+      console.error(err);
+      setWiseBotResponse({ error: err.message || "Failed to analyze message. Please try again later." });
+    } finally {
+      setWiseBotLoading(false);
+    }
+  };
+
   const handleSwipe = useCallback((dir) => {
     if (showReveal) return;
     stopActiveVideo();
@@ -475,7 +563,7 @@ export default function SwipeWise() {
     
     setTimes((p) => [...p, t]);
     setLastAnswer({ correct, userSays, card });
-    setAnswers((p) => [...p, { cardId: card.id, correct, category: card.category, time: t }]);
+    setAnswers((p) => [...p, { cardId: card.id, correct, category: card.category, time: t, confidence: currentConfidence }]);
     
     if (correct) {
       setStreak(s => {
@@ -487,12 +575,14 @@ export default function SwipeWise() {
       setStreak(0);
     }
     setShowReveal(true);
-  }, [ci, showReveal, cardStart, deck, stopActiveVideo]);
+  }, [ci, showReveal, cardStart, deck, stopActiveVideo, currentConfidence]);
 
   const handleNext = useCallback(() => {
     stopActiveVideo();
     setShowReveal(false);
+    setShowHints(false);
     setLastAnswer(null);
+    setCurrentConfidence(null);
     x.set(0);
     if (ci + 1 >= deck.length) {
       setScreen("score");
@@ -505,8 +595,9 @@ export default function SwipeWise() {
   // Calculations
   const stats = useMemo(() => {
     const totalQuestions = deck.length || GAME_QUESTION_COUNT;
-    const correctAnswers = answers.filter((a) => a.correct).length;
-    const accuracy = answers.length ? Math.round((correctAnswers / answers.length) * 100) : 0;
+    const answeredCards = answers.filter((a) => !a.revealed);
+    const correctAnswers = answeredCards.filter((a) => a.correct).length;
+    const accuracy = answeredCards.length ? Math.round((correctAnswers / answeredCards.length) * 100) : 0;
     
     const avgTime = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
     // Speed Score: 100 if < 3s, linear drop to 0 at 15s
@@ -515,20 +606,41 @@ export default function SwipeWise() {
     // Streak Score: linear reward up to total questions
     const streakScore = totalQuestions ? Math.min(100, Math.round((maxStreak / totalQuestions) * 100)) : 0;
 
-    // Awareness Index = 80% Accuracy + 10% Streak + 10% Speed
-    // This ensures accuracy is the primary driver of trust
-    const trustIndex = Math.round((accuracy * 0.8) + (streakScore * 0.1) + (speedScore * 0.1));
+    let trustIndex;
+    if (gameMode === "learn") {
+      trustIndex = answeredCards.length > 0 ? accuracy : 100;
+    } else {
+      trustIndex = Math.round((accuracy * 0.8) + (streakScore * 0.1) + (speedScore * 0.1));
+    }
+    
+    let confidenceScore = 0;
+    let overconfidenceRisk = 0;
+
+    answeredCards.forEach((a) => {
+      if (a.correct) {
+        if (a.confidence === "high") confidenceScore += 10;
+        else if (a.confidence === "low") confidenceScore += 5;
+        else confidenceScore += 7; // Medium
+      } else {
+        if (a.confidence === "high") {
+          confidenceScore -= 10;
+          overconfidenceRisk += 1;
+        }
+        else if (a.confidence === "low") confidenceScore -= 3;
+        else confidenceScore -= 5; // Medium
+      }
+    });
     
     const catScores = {};
     CATEGORIES.forEach((cat) => {
-      const ca = answers.filter((a) => a.category === cat);
+      const ca = answeredCards.filter((a) => a.category === cat);
       catScores[cat] = ca.length ? Math.round((ca.filter((a) => a.correct).length / ca.length) * 100) : 0;
     });
 
-    return { accuracy, trustIndex, catScores, correctCount: correctAnswers };
-  }, [answers, times, maxStreak, deck.length]);
+    return { accuracy, trustIndex, catScores, correctCount: correctAnswers, confidenceScore, overconfidenceRisk };
+  }, [answers, times, maxStreak, deck.length, gameMode]);
 
-  const { accuracy, trustIndex, catScores, correctCount } = stats;
+  const { accuracy, trustIndex, catScores, correctCount, confidenceScore, overconfidenceRisk } = stats;
 
   return (
     <div className="sw-container">
@@ -537,9 +649,11 @@ export default function SwipeWise() {
           <motion.div
             key="intro"
             className="sw-content-wrapper sw-intro"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            layout
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
             <div className="sw-shield-icon">
               <img
@@ -570,14 +684,32 @@ export default function SwipeWise() {
               </div>
             </div>
 
-            <motion.button
-              className="sw-start-btn"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleStart}
-            >
-              Start Game
-            </motion.button>
+            <div className="sw-mode-buttons">
+              <motion.button
+                className="sw-start-btn sw-mode-btn sw-mode-learn"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleModeSelect("learn")}
+              >
+                <div className="sw-mode-icon">🧠</div>
+                <div className="sw-mode-text">
+                  <strong>Learn Mode</strong>
+                  <span>Guided, no pressure</span>
+                </div>
+              </motion.button>
+              <motion.button
+                className="sw-start-btn sw-mode-btn sw-mode-game"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleModeSelect("game")}
+              >
+                <div className="sw-mode-icon">🎮</div>
+                <div className="sw-mode-text">
+                  <strong>Game Mode</strong>
+                  <span>Timer & streak based</span>
+                </div>
+              </motion.button>
+            </div>
             <div className="sw-footer-info" style={{ marginTop: "12px", fontSize: "10px", color: "#444" }}>
               10 rounds • 3 min • Free
             </div>
@@ -588,9 +720,11 @@ export default function SwipeWise() {
           <motion.div
             key="mascot-select"
             className="sw-content-wrapper sw-intro"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
+            layout
+            initial={{ opacity: 0, scale: 0.95, x: 20 }}
+            animate={{ opacity: 1, scale: 1, x: 0 }}
+            exit={{ opacity: 0, scale: 0.95, x: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
             <h2 className="sw-title" style={{ fontSize: "28px", marginBottom: "8px" }}>Choose Your Partner</h2>
             <p style={{ color: "var(--text-secondary)", marginBottom: "40px", fontSize: "14px" }}>
@@ -635,9 +769,11 @@ export default function SwipeWise() {
           <motion.div
             key="game"
             className="sw-content-wrapper"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            layout
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
             <div className="sw-game-header">
               <div className="sw-progress-bar">
@@ -660,7 +796,8 @@ export default function SwipeWise() {
               </div>
               <div className="sw-header-stats">
                 <span>{ci + 1} / {deck.length}</span>
-                <span>Streak: {streak}</span>
+                {gameMode === "game" && <span>Streak: {streak}</span>}
+                {gameMode === "learn" && <span style={{ color: "var(--legit-color)" }}>Learn Mode</span>}
               </div>
             </div>
 
@@ -671,7 +808,7 @@ export default function SwipeWise() {
                     key={deck[ci]?.id}
                     className="sw-card"
                     style={{ x, rotate, opacity }}
-                    drag="x"
+                    drag={!showReveal ? "x" : false}
                     dragConstraints={{ left: 0, right: 0 }}
                     onDragEnd={(_, info) => {
                       if (info.offset.x < -100) handleSwipe("left");
@@ -751,13 +888,57 @@ export default function SwipeWise() {
                       <span>💬 {deck[ci].stats.comments}</span>
                       <span>↗ {deck[ci].stats.shares}</span>
                     </div>
+
+                    {gameMode === "learn" && (
+                      <div className="sw-learn-actions">
+                        {!showHints ? (
+                          <button 
+                            className="sw-learn-btn sw-reveal-hints-btn"
+                            onClick={(e) => { e.stopPropagation(); setShowHints(true); }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            👀 Reveal Hints
+                          </button>
+                        ) : (
+                          <div className="sw-inline-hints">
+                            <h4>Red Flags 🚩</h4>
+                            {deck[ci].redFlags && deck[ci].redFlags.length > 0 ? (
+                              <ul>
+                                {deck[ci].redFlags.map((f, i) => <li key={i}>{f}</li>)}
+                              </ul>
+                            ) : (
+                              <p>No obvious red flags. This looks legitimate.</p>
+                            )}
+                          </div>
+                        )}
+                        <button 
+                          className="sw-learn-btn sw-reveal-answer-btn"
+                          onClick={(e) => { e.stopPropagation(); handleRevealAnswer(); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          📖 Reveal Answer
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="sw-wisebot-btn-container">
+                      <button 
+                        className="sw-wisebot-btn"
+                        onClick={(e) => { e.stopPropagation(); fetchWiseBotAnalysis(deck[ci]); }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        💡 Ask WiseBot
+                      </button>
+                    </div>
                   </motion.div>
                 ) : (
                   <motion.div
                     key="reveal"
                     className="sw-card"
+                    layout
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
                     onClick={handleNext}
                     style={{ cursor: "pointer" }}
                   >
@@ -791,17 +972,38 @@ export default function SwipeWise() {
                       }}>
                         Tap anywhere to continue →
                       </div>
+                      
+                      <div className="sw-wisebot-btn-container" style={{ marginTop: "16px", display: "flex", justifyContent: "center" }}>
+                        <button 
+                          className="sw-wisebot-btn"
+                          onClick={(e) => { e.stopPropagation(); fetchWiseBotAnalysis(deck[ci]); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          💡 Ask WiseBot
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
+            {!showReveal && gameMode === "game" && (
+              <div className="sw-confidence-selector">
+                <div className="sw-confidence-label">How confident are you? (Optional)</div>
+                <div className="sw-confidence-options">
+                  <button onClick={() => setCurrentConfidence("low")} className={`sw-confidence-btn ${currentConfidence === "low" ? "active" : ""}`}>Low</button>
+                  <button onClick={() => setCurrentConfidence("medium")} className={`sw-confidence-btn ${currentConfidence === "medium" ? "active" : ""}`}>Medium</button>
+                  <button onClick={() => setCurrentConfidence("high")} className={`sw-confidence-btn ${currentConfidence === "high" ? "active" : ""}`}>High</button>
+                </div>
+              </div>
+            )}
+
             <div className="sw-controls">
               <motion.button
                 className="sw-action-btn sw-btn-scam"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
+                whileHover={!showReveal ? { scale: 1.1 } : {}}
+                whileTap={!showReveal ? { scale: 0.9 } : {}}
                 onClick={() => handleSwipe("left")}
                 disabled={showReveal}
               >
@@ -809,8 +1011,8 @@ export default function SwipeWise() {
               </motion.button>
               <motion.button
                 className="sw-action-btn sw-btn-legit"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
+                whileHover={!showReveal ? { scale: 1.1 } : {}}
+                whileTap={!showReveal ? { scale: 0.9 } : {}}
                 onClick={() => handleSwipe("right")}
                 disabled={showReveal}
               >
@@ -874,6 +1076,80 @@ export default function SwipeWise() {
                   </motion.div>
               </motion.div>
             )}
+
+            <AnimatePresence>
+              {wiseBotOpen && (
+                <motion.div
+                  className="sw-wisebot-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setWiseBotOpen(false)}
+                >
+                  <motion.div
+                    className="sw-wisebot-modal"
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="sw-wisebot-header">
+                      <div className="sw-wisebot-title">
+                        <span className="sw-wisebot-icon">🤖</span> WiseBot
+                      </div>
+                      <button className="sw-wisebot-close" onClick={() => setWiseBotOpen(false)}>✕</button>
+                    </div>
+
+                    <div className="sw-wisebot-content">
+                      {wiseBotLoading ? (
+                        <div className="sw-wisebot-loading">
+                          <div className="sw-wisebot-spinner"></div>
+                          <p>WiseBot is thinking...</p>
+                        </div>
+                      ) : wiseBotResponse?.error ? (
+                        <div className="sw-wisebot-error">
+                          <p>❌ {wiseBotResponse.error}</p>
+                        </div>
+                      ) : wiseBotResponse ? (
+                        <div className="sw-wisebot-result">
+                          <div className="sw-wisebot-verdict-row">
+                            <div className={`sw-wisebot-verdict ${wiseBotResponse.classification?.toLowerCase() === 'scam' ? 'sw-wb-scam' : 'sw-wb-legit'}`}>
+                              {wiseBotResponse.classification}
+                            </div>
+                            <div className="sw-wisebot-confidence">
+                              Confidence: <strong>{wiseBotResponse.confidence}</strong>
+                            </div>
+                          </div>
+                          
+                          <div className="sw-wisebot-section">
+                            <h4>Explanation</h4>
+                            <p>{wiseBotResponse.explanation}</p>
+                          </div>
+
+                          {wiseBotResponse.red_flags && wiseBotResponse.red_flags.length > 0 && (
+                            <div className="sw-wisebot-section">
+                              <h4>Red Flags 🚩</h4>
+                              <ul>
+                                {wiseBotResponse.red_flags.map((rf, idx) => (
+                                  <li key={idx}>{rf}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          <div className="sw-wisebot-section sw-wisebot-action">
+                            <h4>What you should do 🛡️</h4>
+                            <p>{wiseBotResponse.action}</p>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
           </motion.div>
         )}
 
@@ -881,8 +1157,10 @@ export default function SwipeWise() {
           <motion.div
             key="score"
             className="sw-score-screen"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            layout
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
             {/* <motion.button
               className="sw-share-button"
@@ -929,8 +1207,22 @@ export default function SwipeWise() {
                   <span className="sw-stat-val" style={{ color: "var(--legit-color)" }}>{correctCount}/{deck.length}</span>
                   <span className="sw-stat-label">Correct</span>
                 </div>
+                <div className="sw-stat-box">
+                  <span className="sw-stat-val" style={{ color: "#7b2ff7" }}>{confidenceScore}</span>
+                  <span className="sw-stat-label">Confidence Score</span>
+                </div>
               </div>
             </div>
+            
+            {overconfidenceRisk > 0 && (
+              <div className="sw-overconfidence-alert">
+                <div className="sw-overconfidence-icon">⚠️</div>
+                <div className="sw-overconfidence-text">
+                  <div className="sw-overconfidence-title">Overconfidence Risk</div>
+                  <div className="sw-overconfidence-desc">You were highly confident but wrong in {overconfidenceRisk} case{overconfidenceRisk > 1 ? "s" : ""}.</div>
+                </div>
+              </div>
+            )}
 
             <div className="sw-section-card">
               <div className="sw-section-title">CATEGORY BREAKDOWN</div>
@@ -994,6 +1286,7 @@ export default function SwipeWise() {
                 setCi(0);
                 setAnswers([]);
                 setShowReveal(false);
+                setShowHints(false);
                 setLastAnswer(null);
                 setStreak(0);
                 setMaxStreak(0);
@@ -1009,8 +1302,10 @@ export default function SwipeWise() {
           <motion.div
             key="share"
             className="sw-share-screen"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            layout
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
             <div className="sw-share-preview-label">SHARE PREVIEW</div>
             
@@ -1060,8 +1355,10 @@ export default function SwipeWise() {
           <motion.div
             key="profile"
             className="sw-score-screen"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            layout
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
           <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
                 <img
