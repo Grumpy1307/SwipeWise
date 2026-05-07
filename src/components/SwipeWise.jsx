@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import "./SwipeWise.css";
+import { GAME_CARDS } from "../data/gameCards";
+import { LEARN_MODULES } from "../data/learnModules";
 
 const ASSET_URLS = import.meta.glob("../assets/*", {
   eager: true,
@@ -23,263 +25,6 @@ const resolveAssetUrl = (v) => {
   if (v.includes("://")) return v;
   return ASSETS_BY_NAME[v] || v;
 };
-
-const DEFAULT_VIDEO_POSTER = "";
-
-const CARDS = [
- {
-  id: 1,
-  category: "Investment Scams",
-  type: "scam",
-  profileName: "WealthMax Trading",
-  avatar: "logo.png",
-  tag: "Sponsored",
-  verified: false,
-  stats: { likes: "1.2k", comments: "428", shares: "125" },
-  content:
-   " GUARANTEED 20% monthly returns! Our AI-powered trading bot has NEVER lost a trade. Join 50,000+ investors earning passive income. Limited spots — register NOW with just ₹5,000! Link in bio ",
-  redFlags: [
-   "'Guaranteed returns' — no investment can guarantee returns",
-   "'NEVER lost a trade' — statistically impossible claim",
-   "Urgency tactic: 'Limited spots'",
-   "Low entry amount to reduce hesitation",
-   "No SEBI registration mentioned"
-  ],
-  explanation:
-   "This is a classic investment scam. SEBI regulations prohibit guaranteeing returns. No trading system wins 100% of the time. The urgency and low entry point are manipulation tactics."
- },
- {
-  id: 2,
-  category: "Deepfakes",
-  type: "scam",
-  profileName: "Business Today Live",
-  avatar: "📺",
-  tag: "Verified ✓",
-  verified: true,
-  stats: { likes: "8.5k", comments: "1.2k", shares: "3.4k" },
-  content:
-   "BREAKING: Mukesh Ambani announces new crypto platform 'JioCoin' — says every Indian should invest ₹10,000 now for 10x returns by December. Watch full video interview ",
-  redFlags: [
-   "Celebrity endorsement for crypto — likely deepfake",
-   "Specific return promise (10x)",
-   "'Verified' badge can be faked on screenshots",
-   "No official Reliance/Jio announcement exists",
-   "Urgency: invest 'now'"
-  ],
-  explanation:
-   "Deepfake videos of business leaders endorsing crypto are extremely common. Always verify announcements through official company channels, not social media posts."
- },
- {
-  id: 3,
-  category: "Investment Scams",
-  type: "legit",
-  profileName: "SEBI Investor Education",
-  avatar: "⚖️",
-  tag: "Government",
-  verified: true,
-  stats: { likes: "25k", comments: "890", shares: "12k" },
-  content:
-   "Investing in mutual funds? Remember: All mutual fund investments are subject to market risks. Read all scheme-related documents carefully before investing. Check if your advisor is SEBI-registered at sebi.gov.in #InvestorAwareness",
-  redFlags: [],
-  explanation:
-   "This is legitimate investor education from SEBI. Key trust signals: proper risk disclaimers, directing to official website, no return promises, registered government handle."
- },
- {
-  id: 4,
-  category: "Phishing",
-  type: "scam",
-  profileName: "+91-98XXX-XXXXX",
-  avatar: "💬",
-  tag: "SMS",
-  verified: false,
-  stats: { likes: "2", comments: "0", shares: "0" },
-  content:
-   "URGENT: Your SBI account will be BLOCKED in 24 hours! Complete KYC verification immediately. Click here: http://sbi-kyc-update.xyz/verify. Enter your Aadhaar, PAN & account details to continue.",
-  redFlags: [
-   "Urgency threat: 'BLOCKED in 24 hours'",
-   "Suspicious URL: sbi-kyc-update.xyz (not sbi.co.in)",
-   "Asking for Aadhaar, PAN & account details via link",
-   "Banks NEVER ask for credentials via SMS",
-   "Generic sender number, not official SBI shortcode"
-  ],
-  explanation:
-   "Classic KYC phishing scam. Banks never ask for sensitive details via SMS links. Always visit the official bank website or branch directly."
- },
- {
-  id: 5,
-  category: "Impersonation",
-  type: "scam",
-  profileName: "CA Rakesh Jhunjhunwala Fund",
-  avatar: "🐂",
-  tag: "Telegram Group",
-  verified: false,
-  stats: { likes: "450", comments: "120", shares: "85" },
-  content:
-   "Welcome to the official trading group of late Shri Rakesh Jhunjhunwala's team! We continue his legacy. Today's tip: Buy XYZTECH at ₹45, target ₹120 in 2 weeks. Minimum investment ₹1 lakh via our secure portal.",
-  redFlags: [
-   "Impersonating a deceased public figure",
-   "Using someone's name without authorization",
-   "'Secure portal' for payments — likely fraudulent",
-   "Unrealistic target (167% in 2 weeks)",
-   "Telegram groups are common scam channels"
-  ],
-  explanation:
-   "Scammers frequently impersonate famous investors. Rakesh Jhunjhunwala's estate has no official trading group. No legitimate advisor guarantees specific price targets."
- },
- {
-  id: 6,
-  category: "Deepfakes",
-  type: "legit",
-  profileName: "Zerodha",
-  avatar: "📱",
-  tag: "Verified ✓",
-  verified: true,
-  stats: { likes: "12k", comments: "560", shares: "1.1k" },
-  content:
-   "New feature: Track your portfolio's asset allocation with our updated console. Equity, debt, gold — see where you stand. No predictions, no tips, just data. Update your app to the latest version. #Zerodha",
-  redFlags: [],
-  explanation:
-   "Legitimate post from a SEBI-registered broker. Trust signals: no return promises, focuses on tools/features, directs to official app update, proper disclaimer tone, verified account."
- },
- {
-  id: 7,
-  category: "Phishing",
-  type: "scam",
-  profileName: "TradeMaster Pro AI",
-  avatar: "🤖",
-  tag: "Ad",
-  verified: false,
-  stats: { likes: "3.4k", comments: "890", shares: "450" },
-  content:
-   "Our AI has predicted the next 5 multibagger stocks for 2026! Download our app and get FREE access to premium stock picks. Already 2,0,000+ downloads. Pay nothing today — just connect your demat account to get started!",
-  redFlags: [
-   "'Predicted multibaggers' — AI cannot predict stock prices",
-   "Asking to connect demat account — credential theft risk",
-   "Free premium access is the bait",
-   "Fake download numbers",
-   "No SEBI Research Analyst registration"
-  ],
-  explanation:
-   "No AI can predict multibagger stocks. Connecting your demat account gives scammers access to your portfolio. Always verify if the app/advisor has SEBI RA registration."
- },
- {
-  id: 8,
-  category: "Impersonation",
-  type: "scam",
-  profileName: "WhatsApp Message",
-  avatar: "💬",
-  tag: "WhatsApp",
-  verified: false,
-  stats: { likes: "1", comments: "0", shares: "0" },
-  content:
-   "Hi! I'm Priya from Angel One support team. We noticed unusual activity in your trading account. Please share your Client ID and password so we can secure your account immediately. This is time-sensitive!",
-  redFlags: [
-   "Broker support NEVER contacts via personal WhatsApp",
-   "Asking for password — legitimate support never does this",
-   "Urgency: 'time-sensitive' pressure",
-   "No official verification of identity",
-   "Unsolicited contact about 'unusual activity'"
-  ],
-  explanation:
-   "Brokers never ask for passwords via WhatsApp. If you receive such messages, contact your broker directly through their official app or helpline number."
- },
- {
-  id: 9,
-  category: "Investment Scams",
-  type: "legit",
-  profileName: "AMFI India",
-  avatar: "🇮🇳",
-  tag: "Official",
-  verified: true,
-  stats: { likes: "45k", comments: "2.3k", shares: "15k" },
-  content:
-   "Mutual Fund Sahi Hai! Start your SIP with as little as ₹500/month. Visit amfiindia.com to learn about different fund categories and find a registered distributor near you. Investments are subject to market risk.",
-  redFlags: [],
-  explanation:
-   "Legitimate awareness campaign by AMFI (Association of Mutual Funds in India). Trust signals: proper risk disclaimer, directing to official website, reasonable investment amounts, no return promises."
- },
- {
-  id: 10,
-  category: "Deepfakes",
-  type: "scam",
-  profileName: "CryptoElite India",
-  avatar: "🪙",
-  tag: "Instagram Reel",
-  verified: false,
-  stats: { likes: "2.1k", comments: "4.5k", shares: "890" },
-  content:
-   "WATCH: Ratan Tata's AI explains why Bitcoin will hit $5,00,000! He invested ₹500 crore last week. Comment 'JOIN' and we'll DM you the exclusive investment link. Only 100 spots left today!",
-  redFlags: [
-   "Using Ratan Tata's name without authorization — likely deepfake",
-   "Specific Bitcoin price prediction",
-   "Fake investment claim (₹500 crore)",
-   "'Comment JOIN' — engagement farming tactic",
-   "Artificial scarcity: '100 spots left'"
-  ],
-  explanation:
-   "Deepfake scam using a trusted public figure. Ratan Tata has never endorsed any cryptocurrency. The 'comment to join' tactic harvests targets for DM-based scams."
- },
- {
-  id: 11,
-  category: "Investment Scams",
-  type: "scam",
-  profileName: "Synthetic Trade AI",
-  avatar: "📊",
-  tag: "Ad",
-  verified: false,
-  stats: { likes: "574", comments: "97", shares: "39" },
-  content: "AI-POWERED GUARANTEED PROFITS. 98.5% WIN RATE. EARN 15% DAILY. DEPOSIT NOW — INSTANT ACCESS. Join thousands already earning with our proven algorithm!",
-  image: "/src/assets/q11_trade.png",
-  redFlags: [
-   "'Guaranteed Profits' — no trading platform can guarantee profits",
-   "'98.5% Win Rate' — statistically impossible for any real system",
-   "'Earn 15% Daily' — 15% daily = 5,475% yearly, completely impossible",
-   "Urgency: 'Deposit Now — Instant Access'",
-   "No regulatory registration (SEBI/RBI) mentioned"
-  ],
-  explanation: "This is a fraudulent trading platform ad. Real trading always involves risk — 'guaranteed profits' is illegal to claim under SEBI rules. A '15% daily' return would make someone a billionaire in months. These platforms steal your deposit and vanish."
- },
- {
-  id: 12,
-  category: "Deepfakes",
-  type: "scam",
-  profileName: "InvestmentGuru Live",
-  avatar: "🎬",
-  tag: "Viral Video",
-  verified: false,
-  stats: { likes: "4276", comments: "118", shares: "116" },
-  content: "WATCH: Amitabh Bachchan personally endorses this investment platform and shares how he turned ₹10,000 into ₹5 lakhs in 30 days! Click the link in bio to join — he says hurry, offer closes tonight!",
-  video: "/src/assets/q12_bachchan.mp4",
-  poster: "/src/assets/q12_bachchan_poster.png",
-  redFlags: [
-   "Celebrity deepfake endorsement",
-   "Unrealistic returns (₹10k to ₹5L in 30 days)",
-   "Urgency tactic: 'offer closes tonight'",
-   "Directing to 'link in bio' for suspicious platforms"
-  ],
-  explanation: "This is a deepfake video scam. Scammers use AI to mimic celebrities endorsing fake platforms. No legitimate investment can multiply money 50x in a month. Always verify celebrity endorsements through their official accounts."
- },
- {
-  id: 13,
-  category: "Deepfakes",
-  type: "scam",
-  profileName: "Global Tech News",
-  avatar: "🌍",
-  tag: "Breaking",
-  verified: false,
-  stats: { likes: "12.4k", comments: "892", shares: "2.1k" },
-  content: "EXCLUSIVE: New AI technology promises to double your savings in just 15 days! Watch this leaked interview where top tech leaders explain the secret algorithm. Don't miss out on this limited opportunity!",
-   video: "/src/assets/e2d075e1d5cc464882baba7a257954de_small.mp4",
-  redFlags: [
-   "Unrealistic promise: 'double savings in 15 days'",
-   "Using 'leaked' or 'secret' narrative to build curiosity",
-   "Artificial urgency: 'limited opportunity'",
-   "Likely deepfake of tech leaders",
-   "No verified source or official confirmation"
-  ],
-  explanation: "This video uses deepfake technology to impersonate tech leaders and promote a 'get-rich-quick' scheme. No legitimate investment can double your money in such a short time. Scammers use the 'leaked interview' trope to bypass critical thinking."
- }
-];
 
 const CATEGORIES = ["Investment Scams", "Deepfakes", "Phishing", "Impersonation"];
 
@@ -351,15 +96,22 @@ const shuffle = (arr) => {
 };
 
 const buildGameDeck = () => {
-  const media = CARDS.filter(isMediaCard);
+  const media = GAME_CARDS.filter(isMediaCard);
   if (media.length >= GAME_QUESTION_COUNT) {
     return shuffle(media).slice(0, GAME_QUESTION_COUNT);
   }
 
-  const others = CARDS.filter((c) => !isMediaCard(c));
+  const others = GAME_CARDS.filter((c) => !isMediaCard(c));
   const needed = GAME_QUESTION_COUNT - media.length;
   const pickedOthers = shuffle(others).slice(0, needed);
   return shuffle([...media, ...pickedOthers]);
+};
+
+const buildLearnDeck = (topicId) => {
+  const modules = LEARN_MODULES.filter(m => m.topicId === topicId);
+  // Sort: Beginner -> Intermediate -> Advanced
+  const order = { "Beginner": 1, "Intermediate": 2, "Advanced": 3 };
+  return modules.sort((a, b) => order[a.level] - order[b.level]);
 };
 
 const RadarChart = ({ cats, scores, color }) => {
@@ -446,7 +198,8 @@ export default function SwipeWise() {
   const [wiseBotResponse, setWiseBotResponse] = useState(null);
   const wiseBotCacheRef = useRef({});
   const [gameMode, setGameMode] = useState("game");
-  const [showHints, setShowHints] = useState(false);
+  const [selectedTopicId, setSelectedTopicId] = useState(null);
+  const [learnStep, setLearnStep] = useState("concept"); // concept, swipe, reveal
   const [currentConfidence, setCurrentConfidence] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
@@ -467,6 +220,11 @@ export default function SwipeWise() {
     }
   }, []);
 
+  const handleTopicSelect = (topicId) => {
+    setSelectedTopicId(topicId);
+    setScreen("mascot-select");
+  };
+
   const triggerVibration = useCallback((type = "medium") => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       if (type === "heavy") navigator.vibrate([100]);
@@ -484,22 +242,32 @@ export default function SwipeWise() {
 
   const handleMascotSelect = (mascot) => {
     setSelectedMascot(mascot);
-    setDeck(buildGameDeck());
+    
+    if (gameMode === "learn") {
+      const learnDeck = buildLearnDeck(selectedTopicId);
+      // Map modules to a simpler format for the swiper
+      const formattedDeck = learnDeck.map(m => ({
+        ...m.card,
+        id: m.id,
+        moduleData: m // Store the full module for the concept screen
+      }));
+      setDeck(formattedDeck);
+      setLearnStep("concept");
+      setScreen("game");
+    } else {
+      setDeck(buildGameDeck());
+      setScreen("tutorial");
+    }
+    
     setCi(0);
     setAnswers([]);
     setTimes([]);
     setShowReveal(false);
-    setShowHints(false);
     setCurrentConfidence(null);
     setLastAnswer(null);
     setStreak(0);
     setMaxStreak(0);
     x.set(0);
-    if (gameMode === "learn") {
-      setScreen("game");
-    } else {
-      setScreen("tutorial");
-    }
     setCardStart(getNow());
   };
 
@@ -513,20 +281,6 @@ export default function SwipeWise() {
       // ignore
     }
   }, []);
-
-  const handleRevealAnswer = useCallback(() => {
-    if (showReveal) return;
-    stopActiveVideo();
-    const card = deck[ci];
-    const correct = true; // Mark neutral as correct for UI purposes
-    const t = Math.round(getNow() - cardStart);
-    
-    setTimes((p) => [...p, t]);
-    setLastAnswer({ correct, userSays: "revealed", card });
-    setAnswers((p) => [...p, { cardId: card.id, correct: true, category: card.category, time: t, revealed: true, confidence: currentConfidence }]);
-    
-    setShowReveal(true);
-  }, [ci, showReveal, cardStart, deck, stopActiveVideo, currentConfidence]);
 
   const fetchWiseBotAnalysis = async (card) => {
     if (wiseBotCacheRef.current[card.id]) {
@@ -558,7 +312,7 @@ Output strictly in JSON format:
 Message:
 "${card.content}"`;
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -576,7 +330,6 @@ Message:
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!textResponse) throw new Error("Empty response from WiseBot");
       
-      // Extract JSON from markdown or raw text
       const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Could not find analysis data in WiseBot response.");
       const parsed = JSON.parse(jsonMatch[0]);
@@ -590,6 +343,23 @@ Message:
       setWiseBotLoading(false);
     }
   };
+
+  const handleRevealAnswer = useCallback(() => {
+    if (showReveal) return;
+    stopActiveVideo();
+    const card = deck[ci];
+    const correct = true; // Mark neutral as correct for UI purposes
+    const t = Math.round(getNow() - cardStart);
+    
+    setTimes((p) => [...p, t]);
+    setLastAnswer({ correct, userSays: "revealed", card });
+    setAnswers((p) => [...p, { cardId: card.id, correct: true, category: card.category, time: t, revealed: true, confidence: currentConfidence }]);
+    
+    setShowReveal(true);
+    if (gameMode === "learn") {
+      setLearnStep("reveal");
+    }
+  }, [ci, showReveal, cardStart, deck, stopActiveVideo, currentConfidence, gameMode]);
 
   const handleSwipe = useCallback((dir) => {
     if (showReveal) return;
@@ -623,22 +393,28 @@ Message:
       setStreak(0);
     }
     setShowReveal(true);
-  }, [ci, showReveal, cardStart, deck, stopActiveVideo, currentConfidence]);
+    if (gameMode === "learn") {
+      setLearnStep("reveal");
+    }
+  }, [ci, showReveal, cardStart, deck, stopActiveVideo, currentConfidence, gameMode]);
 
   const handleNext = useCallback(() => {
     stopActiveVideo();
     setShowReveal(false);
-    setShowHints(false);
     setLastAnswer(null);
     setCurrentConfidence(null);
+    setWiseBotOpen(false); // Close WiseBot if it was open
     x.set(0);
     if (ci + 1 >= deck.length) {
       setScreen("score");
     } else {
       setCi(c => c + 1);
+      if (gameMode === "learn") {
+        setLearnStep("concept");
+      }
       setCardStart(getNow());
     }
-  }, [ci, x, deck.length, stopActiveVideo]);
+  }, [ci, x, deck.length, stopActiveVideo, gameMode]);
 
   // Calculations
   const stats = useMemo(() => {
@@ -708,68 +484,77 @@ Message:
             key="intro"
             className="sw-content-wrapper sw-intro"
             layout
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -20 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
           >
-            <div className="sw-shield-icon">
-              <img
-                src={resolveAssetUrl("logo.png")}
-                alt="SwipeWise Logo"
-                style={{ width: 380, height: 140, objectFit: "contain", marginBottom: 0 }}
-              />
-            </div>
-            {/* <h1 className="sw-title">SwipeWise</h1> */}
-            <div className="sw-subtitle" style={{ marginTop: "4px", marginBottom: "12px" }}>
-              BY SEBI × IOSCO TECHSPRINT
-            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+              <motion.div 
+                className="sw-shield-icon"
+                animate={{ 
+                  filter: ["drop-shadow(0 0 20px rgba(0,210,255,0.3))", "drop-shadow(0 0 40px rgba(123,47,247,0.4))", "drop-shadow(0 0 20px rgba(0,210,255,0.3))"]
+                }}
+                transition={{ duration: 4, repeat: Infinity }}
+              >
+                <img
+                  src={resolveAssetUrl("logo.png")}
+                  alt="SwipeWise Logo"
+                  style={{ width: "min(380px, 90vw)", height: "auto", objectFit: "contain", marginBottom: 0 }}
+                />
+              </motion.div>
+              {/* <h1 className="sw-title">SwipeWise</h1> */}
+              <div className="sw-subtitle" style={{ marginTop: "4px", marginBottom: "12px" }}>
+                BY SEBI × IOSCO TECHSPRINT
+              </div>
 
-            <div className="sw-glass-card">
-              <h2 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "10px" }}>Test Your Awareness Index</h2>
-              <p style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-                Can you spot scams before they trap you?
-              </p>
-              <div className="sw-hint-container">
-                <div className="sw-hint-item">
-                  <span className="sw-hint-emoji">👈</span>
-                  <span className="sw-hint-label" style={{ color: "var(--scam-color)" }}>Scam</span>
-                </div>
-                <div className="sw-hint-item">
-                  <span className="sw-hint-emoji">👉</span>
-                  <span className="sw-hint-label" style={{ color: "var(--legit-color)" }}>Legit</span>
+              <div className="sw-glass-card">
+                <h2 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "10px" }}>Test Your Awareness Index</h2>
+                <p style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+                  Can you spot scams before they trap you?
+                </p>
+                <div className="sw-hint-container">
+                  <div className="sw-hint-item">
+                    <span className="sw-hint-emoji">👈</span>
+                    <span className="sw-hint-label" style={{ color: "var(--scam-color)" }}>Scam</span>
+                  </div>
+                  <div className="sw-hint-item">
+                    <span className="sw-hint-emoji">👉</span>
+                    <span className="sw-hint-label" style={{ color: "var(--legit-color)" }}>Legit</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="sw-mode-buttons">
-              <motion.button
-                className="sw-start-btn sw-mode-btn sw-mode-learn"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handleModeSelect("learn")}
-              >
-                <div className="sw-mode-icon">🧠</div>
-                <div className="sw-mode-text">
-                  <strong>Learn Mode</strong>
-                  <span>Guided, no pressure</span>
-                </div>
-              </motion.button>
-              <motion.button
-                className="sw-start-btn sw-mode-btn sw-mode-game"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handleModeSelect("game")}
-              >
-                <div className="sw-mode-icon">🎮</div>
-                <div className="sw-mode-text">
-                  <strong>Game Mode</strong>
-                  <span>Timer & streak based</span>
-                </div>
-              </motion.button>
-            </div>
-            <div className="sw-footer-info" style={{ marginTop: "12px", fontSize: "10px", color: "#444" }}>
-              10 rounds • 3 min • Free
+            <div style={{ width: '100%', paddingBottom: '20px' }}>
+              <div className="sw-mode-buttons">
+                <motion.button
+                  className="sw-start-btn sw-mode-btn sw-mode-learn"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleModeSelect("learn")}
+                >
+                  <div className="sw-mode-icon">🧠</div>
+                  <div className="sw-mode-text">
+                    <strong>Learn Mode</strong>
+                    <span>Guided, no pressure</span>
+                  </div>
+                </motion.button>
+                <motion.button
+                  className="sw-start-btn sw-mode-btn sw-mode-game"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleModeSelect("game")}
+                >
+                  <div className="sw-mode-icon">🎮</div>
+                  <div className="sw-mode-text">
+                    <strong>Game Mode</strong>
+                    <span>Timer & streak based</span>
+                  </div>
+                </motion.button>
+              </div>
+              <div className="sw-footer-info" style={{ marginTop: "12px", fontSize: "10px", color: "#444" }}>
+                10 rounds • 3 min • Free
+              </div>
             </div>
           </motion.div>
         )}
@@ -785,28 +570,13 @@ Message:
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
             <h2 style={{ fontSize: "24px", fontWeight: 800, marginBottom: "20px", textAlign: "center" }}>Choose Learning Path</h2>
-            <div className="sw-topic-grid" style={{ 
-              display: "flex", flexDirection: "column", gap: "12px", 
-              width: "100%", maxHeight: "65vh", overflowY: "auto", 
-              paddingRight: "10px", paddingBottom: "20px" 
-            }}>
+            <div className="sw-topic-grid">
               {LEARN_TOPICS.map(t => (
                 <motion.div
                   key={t.id}
-                  className="sw-glass-card"
-                  style={{ 
-                    display: "flex", 
-                    alignItems: "center", 
-                    gap: "16px", 
-                    cursor: "pointer", 
-                    padding: "16px", 
-                    textAlign: "left",
-                    width: "100%",
-                    boxSizing: "border-box"
-                  }}
-                  whileHover={{ scale: 1.02, background: "rgba(255,255,255,0.08)" }}
+                  className="sw-glass-card sw-topic-card"
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => setScreen("mascot-select")}
+                  onClick={() => handleTopicSelect(t.id)}
                 >
                   <div style={{ fontSize: "36px", flexShrink: 0 }}>{t.icon}</div>
                   <div style={{ flex: 1 }}>
@@ -823,7 +593,7 @@ Message:
                 </motion.div>
               ))}
             </div>
-            <button className="sw-back-link" onClick={() => setScreen("intro")} style={{ marginTop: "20px" }}>← Back</button>
+            <button className="sw-back-link" onClick={() => setScreen("intro")} style={{ marginTop: "10px" }}>← Back</button>
           </motion.div>
         )}
 
@@ -853,15 +623,22 @@ Message:
                   style={{ borderColor: m.color }}
                 >
                   <div className="sw-mascot-img-container">
-                    <img
+                    <motion.img
                       src={resolveAssetUrl(m.img)}
                       alt={m.name}
                       className="sw-mascot-select-img"
                       decoding="async"
                       loading="eager"
+                      whileHover={{ scale: 1.1, rotate: 5 }}
                     />
                   </div>
-                  <div className="sw-mascot-name" style={{ color: m.color, fontWeight: "bold", marginTop: "10px" }}>{m.name}</div>
+                  <div className="sw-mascot-name" style={{ 
+                    color: m.color, 
+                    fontWeight: "800", 
+                    marginTop: "12px",
+                    fontSize: "16px",
+                    textShadow: `0 0 10px ${m.color}44`
+                  }}>{m.name}</div>
                 </motion.div>
               ))}
             </div>
@@ -885,6 +662,7 @@ Message:
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            style={{ position: 'relative', overscrollBehavior: 'none' }}
           >
             <h2 style={{ fontSize: "28px", fontWeight: 800, marginBottom: "20px", color: "var(--legit-color)", textAlign: "center" }}>How to Play</h2>
             
@@ -967,7 +745,7 @@ Message:
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
-            <div className="sw-top-app-bar">
+            <div className={`sw-top-app-bar ${gameMode === 'learn' ? 'sw-top-app-bar--learn' : ''}`}>
               <button className="sw-home-icon-btn" onClick={handleExitHome} title="Exit to Home">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -987,7 +765,7 @@ Message:
                               ? "var(--legit-color)"
                               : "var(--scam-color)"
                             : i === ci && !showReveal
-                            ? "rgba(123,47,247,0.5)"
+                            ? gameMode === 'learn' ? "var(--primary-color)" : "rgba(123,47,247,0.5)"
                             : "rgba(255,255,255,0.1)",
                       }}
                     />
@@ -996,10 +774,51 @@ Message:
                 <div className="sw-header-stats">
                   <span>{ci + 1} / {deck.length}</span>
                   {gameMode === "game" && <span className={streak >= 3 ? "sw-streak-glow" : ""}>Streak: {streak}</span>}
-                  {gameMode === "learn" && <span style={{ color: "var(--legit-color)" }}>Learn Mode</span>}
+                  {gameMode === "learn" && <span style={{ color: "var(--primary-color)" }}>Learn Mode</span>}
                 </div>
               </div>
             </div>
+
+            {/* Learn Mode: Concept Step */}
+            {gameMode === "learn" && learnStep === "concept" && deck[ci]?.moduleData && (
+              <motion.div 
+                className="sw-learn-concept-card sw-glass-card"
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -50 }}
+              >
+                <div className="sw-concept-header">
+                  <span className="sw-concept-topic-icon">{LEARN_TOPICS.find(t => t.id === selectedTopicId)?.icon}</span>
+                  <h3>{deck[ci].moduleData.title}</h3>
+                </div>
+                <div className="sw-concept-scrollable">
+                  <div className="sw-concept-section">
+                    <h4>Concept</h4>
+                    <p>{deck[ci].moduleData.concept}</p>
+                  </div>
+                  <div className="sw-concept-section">
+                    <h4>Real-World Example</h4>
+                    <p style={{ fontStyle: "italic" }}>"{deck[ci].moduleData.example}"</p>
+                  </div>
+                  <div className="sw-concept-section">
+                    <h4>Common Tactics</h4>
+                    <ul>
+                      {deck[ci].moduleData.tactics.map((t, idx) => <li key={idx}>{t}</li>)}
+                    </ul>
+                  </div>
+                  <div className="sw-concept-section">
+                    <h4>Why People Fall For This</h4>
+                    <p>{deck[ci].moduleData.whyPeopleFall}</p>
+                  </div>
+                </div>
+                <button 
+                  className="sw-action-btn sw-concept-next-btn"
+                  onClick={() => setLearnStep("swipe")}
+                >
+                  Ready to Practice? Let's Go →
+                </button>
+              </motion.div>
+            )}
 
             <AnimatePresence>
               {showExitConfirm && (
@@ -1017,26 +836,35 @@ Message:
                     transition={{ type: "spring", stiffness: 300, damping: 25 }}
                   >
                     <div className="sw-modal-icon">⚠️</div>
-                    <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '24px', margin: '0 0 12px 0' }}>Exit to Home?</h3>
-                    <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '15px' }}>Are you sure you want to exit? Your current progress will be lost.</p>
+                    <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '24px', margin: '0 0 12px 0' }}>
+                      {gameMode === 'learn' ? 'Exit Learn Mode?' : 'Exit Game?'}
+                    </h3>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '15px' }}>
+                      Are you sure you want to exit? Your current progress will be lost.
+                    </p>
                     <div className="sw-modal-actions">
                       <button className="sw-modal-btn sw-btn-cancel" onClick={() => setShowExitConfirm(false)}>Resume</button>
-                      <button className="sw-modal-btn sw-btn-confirm" onClick={confirmExit}>Exit Game</button>
+                      <button className="sw-modal-btn sw-btn-confirm" onClick={confirmExit}>
+                        {gameMode === 'learn' ? 'Exit Learn' : 'Exit Game'}
+                      </button>
                     </div>
                   </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <div className="sw-card-container">
-              {!showReveal && deck[ci + 2] && (
-                <div className="sw-card sw-card-behind" style={{ transform: "scale(0.90) translateY(40px)", zIndex: 0, opacity: 0.6, background: "var(--glass-bg)", filter: "blur(2px)" }} />
-              )}
-              {!showReveal && deck[ci + 1] && (
-                <div className="sw-card sw-card-behind" style={{ transform: "scale(0.95) translateY(20px)", zIndex: 1, opacity: 0.8, background: "var(--glass-bg)" }} />
-              )}
-              <AnimatePresence mode="wait">
-                {!showReveal ? (
+            {/* Only show cards if we are not in concept step */}
+            {!(gameMode === "learn" && learnStep === "concept") && (
+              <div className="sw-card-container">
+                <>
+                  {!showReveal && deck[ci + 2] && (
+                    <div className="sw-card sw-card-behind" style={{ transform: "scale(0.90) translateY(40px)", zIndex: 0, opacity: 0.6, background: "var(--glass-bg)", filter: "blur(2px)" }} />
+                  )}
+                  {!showReveal && deck[ci + 1] && (
+                    <div className="sw-card sw-card-behind" style={{ transform: "scale(0.95) translateY(20px)", zIndex: 1, opacity: 0.8, background: "var(--glass-bg)" }} />
+                  )}
+                  <AnimatePresence mode="wait">
+                    {!showReveal ? (
                   <motion.div
                     key={deck[ci]?.id}
                     className="sw-card"
@@ -1122,39 +950,19 @@ Message:
                     </div>
 
                     <div className="sw-post-stats">
-                      <span>❤️ {deck[ci].stats.likes}</span>
-                      <span>💬 {deck[ci].stats.comments}</span>
-                      <span>↗ {deck[ci].stats.shares}</span>
+                      <span>❤️ {deck[ci].stats?.likes || 0}</span>
+                      <span>💬 {deck[ci].stats?.comments || 0}</span>
+                      <span>↗ {deck[ci].stats?.shares || 0}</span>
                     </div>
 
                     {gameMode === "learn" && (
                       <div className="sw-learn-actions">
-                        {!showHints ? (
-                          <button 
-                            className="sw-learn-btn sw-reveal-hints-btn"
-                            onClick={(e) => { e.stopPropagation(); setShowHints(true); }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                          >
-                            👀 Reveal Hints
-                          </button>
-                        ) : (
-                          <div className="sw-inline-hints">
-                            <h4>Red Flags 🚩</h4>
-                            {deck[ci].redFlags && deck[ci].redFlags.length > 0 ? (
-                              <ul>
-                                {deck[ci].redFlags.map((f, i) => <li key={i}>{f}</li>)}
-                              </ul>
-                            ) : (
-                              <p>No obvious red flags. This looks legitimate.</p>
-                            )}
-                          </div>
-                        )}
                         <button 
                           className="sw-learn-btn sw-reveal-answer-btn"
                           onClick={(e) => { e.stopPropagation(); handleRevealAnswer(); }}
                           onPointerDown={(e) => e.stopPropagation()}
                         >
-                          📖 Reveal Answer
+                          📖 I'm Ready - Reveal Answer
                         </button>
                       </div>
                     )}
@@ -1198,6 +1006,18 @@ Message:
                       )}
 
                       <div className="sw-explanation">{deck[ci].explanation}</div>
+                      
+                      {gameMode === "learn" && deck[ci].moduleData && (
+                        <div className="sw-learn-checklist">
+                          <h4>What You Should Check ✅</h4>
+                          <ul>
+                            {deck[ci].moduleData.checkList.map((item, idx) => (
+                              <li key={idx}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
                       <div style={{ 
                         marginTop: "24px", 
                         paddingTop: "16px",
@@ -1208,7 +1028,7 @@ Message:
                         opacity: 0.9,
                         letterSpacing: "0.5px"
                       }}>
-                        Tap anywhere to continue →
+                        {gameMode === 'learn' ? 'Next Lesson →' : 'Tap anywhere to continue →'}
                       </div>
                       
                       <div className="sw-wisebot-btn-container" style={{ marginTop: "16px", display: "flex", justifyContent: "center" }}>
@@ -1224,7 +1044,9 @@ Message:
                   </motion.div>
                 )}
               </AnimatePresence>
+              </>
             </div>
+          )}
 
             {!showReveal && gameMode === "game" && (
               <div className="sw-confidence-selector">
@@ -1237,12 +1059,14 @@ Message:
               </div>
             )}
             
-            <div className="sw-hints" style={{ marginTop: "16px" }}>
-              <span>← Swipe Left if Scam</span>
-              <span>Swipe Right if Legit →</span>
-            </div>
+            {!(gameMode === "learn" && learnStep === "concept") && (
+              <div className="sw-hints" style={{ marginTop: "16px" }}>
+                <span>← Swipe Left if Scam</span>
+                <span>Swipe Right if Legit →</span>
+              </div>
+            )}
 
-            {selectedMascot && !wiseBotOpen && (
+            {!(gameMode === "learn" && learnStep === "concept") && selectedMascot && !wiseBotOpen && (
               <motion.div
                 className="sw-active-mascot"
                 initial={{ y: 50, opacity: 0 }}
@@ -1530,7 +1354,6 @@ Message:
                 setCi(0);
                 setAnswers([]);
                 setShowReveal(false);
-                setShowHints(false);
                 setLastAnswer(null);
                 setStreak(0);
                 setMaxStreak(0);
