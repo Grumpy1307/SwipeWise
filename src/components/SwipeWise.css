@@ -38,6 +38,7 @@
 
 h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
   font-family: 'Outfit', sans-serif;
+  color: var(--text-primary) !important;
 }
 
 .sw-content-wrapper {
@@ -1471,8 +1472,8 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
   }
 
   .sw-topic-grid {
-    max-height: 50vh;
-    padding-bottom: 20px;
+    max-height: 72vh;
+    padding-bottom: 30px;
   }
 
   .sw-learn-btn, .sw-wisebot-btn, .sw-action-btn {
@@ -1614,11 +1615,12 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
   letter-spacing: 1px;
 }
 
+
 .sw-concept-section p {
   margin: 0;
   font-size: 15px;
   line-height: 1.6;
-  color: #f1f2f6;
+  color: #ffffff !important;
 }
 
 .sw-concept-section ul {
@@ -1689,7 +1691,7 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
 .sw-learn-checklist li {
   font-size: 13px;
   margin-bottom: 5px;
-  color: #f1f2f6;
+  color: #ffffff !important;
 }
 
 .sw-topic-grid {
@@ -1698,10 +1700,10 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
   gap: 12px;
   width: 100%;
   box-sizing: border-box;
-  max-height: 55vh;
+  max-height: 72vh;
   overflow-y: auto;
   padding-right: 8px;
-  margin: 20px 0;
+  margin: 10px 0;
 }
 
 .sw-topic-grid::-webkit-scrollbar {
@@ -1743,6 +1745,8 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
   }
 
   .sw-topic-grid {
-    max-height: 45vh;
+    max-height: 72vh;
+    padding-bottom: 30px;
+    margin: 10px 0;
   }
 }
