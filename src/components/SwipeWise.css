@@ -990,9 +990,42 @@ h1, h2, h3, .sw-title, .sw-score-header span, .sw-trust-value, .sw-badge-title {
 .sw-wisebot-error {
   color: var(--scam-color);
   background: rgba(255, 71, 87, 0.1);
-  padding: 16px;
-  border-radius: 12px;
+  padding: 24px 16px;
+  border-radius: 16px;
   text-align: center;
+  border: 1px solid rgba(255, 71, 87, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.sw-wisebot-error p {
+  margin: 0;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.sw-wisebot-retry-btn {
+  background: var(--primary-gradient);
+  border: none;
+  border-radius: 12px;
+  padding: 10px 24px;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(123, 47, 247, 0.3);
+  transition: all 0.2s ease;
+}
+
+.sw-wisebot-retry-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(123, 47, 247, 0.4);
+}
+
+.sw-wisebot-retry-btn:active {
+  transform: translateY(0);
 }
 
 .sw-wisebot-result {

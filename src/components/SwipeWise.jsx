@@ -282,8 +282,8 @@ export default function SwipeWise() {
     }
   }, []);
 
-  const fetchWiseBotAnalysis = async (card) => {
-    if (wiseBotCacheRef.current[card.id]) {
+  const fetchWiseBotAnalysis = async (card, isRetry = false) => {
+    if (!isRetry && wiseBotCacheRef.current[card.id]) {
       setWiseBotResponse(wiseBotCacheRef.current[card.id]);
       setWiseBotOpen(true);
       return;
@@ -312,7 +312,7 @@ Output strictly in JSON format:
 Message:
 "${card.content}"`;
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -323,6 +323,11 @@ Message:
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         console.error("Gemini API Error:", errorData);
+        
+        if (res.status === 429) {
+          throw new Error("WiseBot is currently busy (Rate limit reached). The free tier quota might be exhausted for today. Please try again in a few minutes.");
+        }
+        
         throw new Error(`API request failed (Status: ${res.status}). ${errorData.error?.message || ""}`);
       }
       
@@ -1151,6 +1156,12 @@ Message:
                       ) : wiseBotResponse?.error ? (
                         <div className="sw-wisebot-error">
                           <p>❌ {wiseBotResponse.error}</p>
+                          <button 
+                            className="sw-wisebot-retry-btn"
+                            onClick={() => fetchWiseBotAnalysis(deck[ci], true)}
+                          >
+                            🔄 Retry Analysis
+                          </button>
                         </div>
                       ) : wiseBotResponse ? (
                         <div className="sw-wisebot-result">
