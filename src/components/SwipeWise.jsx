@@ -1,8 +1,12 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import "./SwipeWise.css";
 import { GAME_CARDS } from "../data/gameCards";
 import { LEARN_MODULES } from "../data/learnModules";
+import { TRANSLATIONS, translateCard } from "../data/translations";
+import { JURISDICTIONS } from "../data/jurisdictions";
+import ScamShield from "./ScamShield";
+import AdminDashboard from "./AdminDashboard";
 
 const ASSET_URLS = import.meta.glob("../assets/*", {
   eager: true,
@@ -95,25 +99,6 @@ const shuffle = (arr) => {
   return a;
 };
 
-const buildGameDeck = () => {
-  const media = GAME_CARDS.filter(isMediaCard);
-  if (media.length >= GAME_QUESTION_COUNT) {
-    return shuffle(media).slice(0, GAME_QUESTION_COUNT);
-  }
-
-  const others = GAME_CARDS.filter((c) => !isMediaCard(c));
-  const needed = GAME_QUESTION_COUNT - media.length;
-  const pickedOthers = shuffle(others).slice(0, needed);
-  return shuffle([...media, ...pickedOthers]);
-};
-
-const buildLearnDeck = (topicId) => {
-  const modules = LEARN_MODULES.filter(m => m.topicId === topicId);
-  // Sort: Beginner -> Intermediate -> Advanced
-  const order = { "Beginner": 1, "Intermediate": 2, "Advanced": 3 };
-  return modules.sort((a, b) => order[a.level] - order[b.level]);
-};
-
 const RadarChart = ({ cats, scores, color }) => {
   const cx = 100, cy = 100, r = 70;
   const angles = cats.map((_, i) => (Math.PI * 2 * i) / cats.length - Math.PI / 2);
@@ -181,6 +166,29 @@ const RadarChart = ({ cats, scores, color }) => {
 
 export default function SwipeWise() {
   const [screen, setScreen] = useState("intro");
+  const [lang, setLang] = useState("en");
+  const [jurisdiction, setJurisdiction] = useState("in");
+  const [translatingDeck, setTranslatingDeck] = useState(false);
+  const [customCards, setCustomCards] = useState([]);
+  const [reportedScams, setReportedScams] = useState([]);
+  const [activePopup, setActivePopup] = useState(null); // "lang" | "jurisdiction" | null
+  
+  // Accessibility
+  const [ttsActive, setTtsActive] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [speechTranscript, setSpeechTranscript] = useState("");
+  const recognitionRef = useRef(null);
+  
+  // ScamShield programmatic controls
+  const [scamShieldInput, setScamShieldInput] = useState("");
+  const [scamShieldTrigger, setScamShieldTrigger] = useState(0);
+
+  // Sync RTL layout
+  useEffect(() => {
+    const dir = lang === "ar" ? "rtl" : "ltr";
+    document.documentElement.dir = dir;
+  }, [lang]);
+
   const [selectedMascot, setSelectedMascot] = useState(null);
   const [deck, setDeck] = useState([]);
   const [ci, setCi] = useState(0);
@@ -211,6 +219,33 @@ export default function SwipeWise() {
   const scamOpacity = useTransform(x, [-100, -50], [1, 0]);
   const legitOpacity = useTransform(x, [50, 100], [0, 1]);
 
+  // Dynamic Deck Builders
+  const getDynamicGameDeck = useCallback(() => {
+    const activeRegistry = [
+      ...GAME_CARDS,
+      ...customCards,
+      ...(JURISDICTIONS[jurisdiction]?.cards || [])
+    ];
+    const media = activeRegistry.filter(isMediaCard);
+    if (media.length >= GAME_QUESTION_COUNT) {
+      return shuffle(media).slice(0, GAME_QUESTION_COUNT);
+    }
+    const others = activeRegistry.filter((c) => !isMediaCard(c));
+    const needed = GAME_QUESTION_COUNT - media.length;
+    const pickedOthers = shuffle(others).slice(0, needed);
+    return shuffle([...media, ...pickedOthers]);
+  }, [customCards, jurisdiction]);
+
+  const getDynamicLearnDeck = useCallback((topicId) => {
+    const activeRegistry = [
+      ...LEARN_MODULES,
+      ...(JURISDICTIONS[jurisdiction]?.learnModules || [])
+    ];
+    const modules = activeRegistry.filter(m => m.topicId === topicId);
+    const order = { "Beginner": 1, "Intermediate": 2, "Advanced": 3 };
+    return modules.sort((a, b) => order[a.level] - order[b.level]);
+  }, [jurisdiction]);
+
   const handleModeSelect = useCallback((mode) => {
     setGameMode(mode);
     if (mode === "learn") {
@@ -220,10 +255,10 @@ export default function SwipeWise() {
     }
   }, []);
 
-  const handleTopicSelect = (topicId) => {
+  const handleTopicSelect = useCallback((topicId) => {
     setSelectedTopicId(topicId);
     setScreen("mascot-select");
-  };
+  }, []);
 
   const triggerVibration = useCallback((type = "medium") => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -240,25 +275,8 @@ export default function SwipeWise() {
     setScreen("intro");
   }, []);
 
-  const handleMascotSelect = (mascot) => {
+  const handleMascotSelect = useCallback(async (mascot) => {
     setSelectedMascot(mascot);
-    
-    if (gameMode === "learn") {
-      const learnDeck = buildLearnDeck(selectedTopicId);
-      // Map modules to a simpler format for the swiper
-      const formattedDeck = learnDeck.map(m => ({
-        ...m.card,
-        id: m.id,
-        moduleData: m // Store the full module for the concept screen
-      }));
-      setDeck(formattedDeck);
-      setLearnStep("concept");
-      setScreen("game");
-    } else {
-      setDeck(buildGameDeck());
-      setScreen("tutorial");
-    }
-    
     setCi(0);
     setAnswers([]);
     setTimes([]);
@@ -269,7 +287,126 @@ export default function SwipeWise() {
     setMaxStreak(0);
     x.set(0);
     setCardStart(getNow());
-  };
+
+    let finalDeck;
+    if (gameMode === "learn") {
+      const learnDeck = getDynamicLearnDeck(selectedTopicId);
+      finalDeck = learnDeck.map(m => ({
+        ...m.card,
+        id: m.id,
+        moduleData: m
+      }));
+    } else {
+      finalDeck = getDynamicGameDeck();
+    }
+
+    if (lang !== "en") {
+      setTranslatingDeck(true);
+      try {
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        const translated = await Promise.all(
+          finalDeck.map(card => translateCard(card, lang, apiKey))
+        );
+        setDeck(translated);
+        setTranslatingDeck(false);
+        if (gameMode === "learn") {
+          setLearnStep("concept");
+          setScreen("game");
+        } else {
+          setScreen("tutorial");
+        }
+      } catch (err) {
+        console.warn("AI translation of deck failed, loading fallback:", err);
+        setDeck(finalDeck);
+        setTranslatingDeck(false);
+        if (gameMode === "learn") {
+          setLearnStep("concept");
+          setScreen("game");
+        } else {
+          setScreen("tutorial");
+        }
+      }
+    } else {
+      setDeck(finalDeck);
+      if (gameMode === "learn") {
+        setLearnStep("concept");
+        setScreen("game");
+      } else {
+        setScreen("tutorial");
+      }
+    }
+  }, [gameMode, selectedTopicId, getDynamicLearnDeck, getDynamicGameDeck, lang, x]);
+
+  const voiceActiveRef = useRef(voiceActive);
+  useEffect(() => {
+    voiceActiveRef.current = voiceActive;
+  }, [voiceActive]);
+
+  // Warm up the speech synthesis voices cache
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      const handleVoicesChanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+      window.speechSynthesis.addEventListener("voiceschanged", handleVoicesChanged);
+      return () => {
+        window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesChanged);
+      };
+    }
+  }, []);
+
+  // Accessibility: Text-to-Speech
+  const speakText = useCallback((text) => {
+    if (!text) return;
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    
+    const langCodes = { en: "en-US", hi: "hi-IN", ar: "ar-AE", es: "es-ES" };
+    const targetLangCode = langCodes[lang] || "en-US";
+    const langPrefix = lang.toLowerCase();
+    
+    // Filter voices matching the target language prefix (e.g., "hi", "ar", "es", "en")
+    const matchingVoices = voices.filter(v => {
+      const vLang = v.lang.toLowerCase().replace('_', '-');
+      return vLang.startsWith(langPrefix) || vLang === langPrefix;
+    });
+
+    let selectedVoice = null;
+    if (matchingVoices.length > 0) {
+      // Prioritize premium/natural/Google/neural voices if available
+      selectedVoice = matchingVoices.find(v => 
+        v.name.toLowerCase().includes("premium") || 
+        v.name.toLowerCase().includes("natural") || 
+        v.name.toLowerCase().includes("google") ||
+        v.name.toLowerCase().includes("neural")
+      ) || matchingVoices.find(v => v.lang === targetLangCode) || matchingVoices[0];
+    }
+    
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
+    utterance.lang = targetLangCode;
+    
+    // Adjust rate and pitch slightly for a more natural human cadence
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    
+    utterance.onstart = () => setTtsActive(true);
+    utterance.onend = () => setTtsActive(false);
+    utterance.onerror = () => setTtsActive(false);
+    
+    window.speechSynthesis.speak(utterance);
+  }, [lang]);
+
+  const stopSpeech = useCallback(() => {
+    window.speechSynthesis.cancel();
+    setTtsActive(false);
+  }, []);
+
+
 
   const stopActiveVideo = useCallback(() => {
     const v = activeVideoRef.current;
@@ -282,7 +419,7 @@ export default function SwipeWise() {
     }
   }, []);
 
-  const fetchWiseBotAnalysis = async (card, isRetry = false) => {
+  const fetchWiseBotAnalysis = useCallback(async (card, isRetry = false) => {
     if (!isRetry && wiseBotCacheRef.current[card.id]) {
       setWiseBotResponse(wiseBotCacheRef.current[card.id]);
       setWiseBotOpen(true);
@@ -299,7 +436,8 @@ export default function SwipeWise() {
         throw new Error("Gemini API key is missing. Please add VITE_GEMINI_API_KEY to your .env file.");
       }
 
-      const prompt = `You are a financial fraud detection assistant trained on SEBI guidelines.
+      const regName = JURISDICTIONS[jurisdiction]?.regulator || "SEBI";
+      const prompt = `You are a financial fraud detection assistant trained on ${regName} guidelines.
 Analyze the following message and classify it.
 Output strictly in JSON format:
 {
@@ -347,7 +485,7 @@ Message:
     } finally {
       setWiseBotLoading(false);
     }
-  };
+  }, [jurisdiction]);
 
   const handleRevealAnswer = useCallback(() => {
     if (showReveal) return;
@@ -401,7 +539,7 @@ Message:
     if (gameMode === "learn") {
       setLearnStep("reveal");
     }
-  }, [ci, showReveal, cardStart, deck, stopActiveVideo, currentConfidence, gameMode]);
+  }, [ci, showReveal, cardStart, deck, stopActiveVideo, currentConfidence, gameMode, triggerVibration]);
 
   const handleNext = useCallback(() => {
     stopActiveVideo();
@@ -481,9 +619,566 @@ Message:
 
   const { accuracy, trustIndex, catScores, correctCount, confidenceScore, overconfidenceRisk, vulnerabilities, strengths } = stats;
 
+  const getScreenNarrationText = useCallback(() => {
+    let textToSpeak = "";
+    if (screen === "setup") {
+      textToSpeak = "Welcome to SwipeWise! You are in Accessibility Voice Guide Mode. Press Spacebar to repeat this guide. Speak english, hindi, arabic, or spanish to change language. Say: india, usa, uk, spain, or uae to select country. Say continue to start playing.";
+    } else if (screen === "intro") {
+      textToSpeak = "Welcome to SwipeWise! You are in Accessibility Voice Guide Mode. Press Spacebar to repeat this guide. Home screen. Speak: 'Learn Mode' to learn, or 'Game Mode' to start the challenge. You can also say 'Shield' to check links, or 'Portal' for regulatory metrics. To customize your language, say: english, hindi, arabic, or spanish. To customize country, say: india, usa, uk, spain, or uae.";
+    } else if (screen === "topic-select") {
+      textToSpeak = "Choose your learning path. Topics are: beginner, basics, scams, trading, phishing, deepfakes, social, banking, identity, psychology, or safe.";
+    } else if (screen === "mascot-select") {
+      textToSpeak = "Select your partner mascot. Say: Naruto, Baggie, Gemmy, or Doraemon.";
+    } else if (screen === "tutorial") {
+      textToSpeak = "How to play. You will see social media messages. Swipe left or say 'Scam' for scams. Swipe right or say 'Legit' for real posts. Say continue to start playing.";
+    } else if (screen === "game") {
+      if (gameMode === "learn" && learnStep === "concept") {
+        const module = deck[ci]?.moduleData;
+        if (module) {
+          textToSpeak = `Concept Lesson: ${module.title}. Concept description: ${module.concept}. For example: ${module.example}. Say continue to start practicing.`;
+        }
+      } else if (showReveal) {
+        const correctStatus = lastAnswer?.correct ? "Correct answer!" : "Wrong answer.";
+        const typeStatus = deck[ci]?.type === "scam" ? "This was a Scam." : "This was Legit.";
+        textToSpeak = `${correctStatus} ${typeStatus} Explanation: ${deck[ci]?.explanation || ""}. Say next or continue to go to the next card.`;
+      } else {
+        textToSpeak = `Card ${ci + 1} of ${deck.length}. Category: ${deck[ci]?.category || ""}. Post content: ${deck[ci]?.content || ""}. Is this a scam or legit? Speak 'scam' or 'legit'. You can also say 'wise bot' for regulatory analysis.`;
+      }
+    } else if (screen === "score") {
+      textToSpeak = `Completed! Your Awareness Index is ${trustIndex} out of 100. Accuracy is ${accuracy} percent. Say play again to restart, or profile to view metrics.`;
+    } else if (screen === "profile") {
+      textToSpeak = `Profile screen. Your Awareness Index is ${trustIndex}. Say back to return to score.`;
+    } else if (screen === "scamshield") {
+      textToSpeak = "ScamShield tools. Speak 'Scan' followed by a link to audit it. Speak home to go back.";
+    } else if (screen === "admin") {
+      textToSpeak = "Regulatory Portal. Speak home to return to main menu.";
+    }
+    return textToSpeak;
+  }, [screen, ci, showReveal, learnStep, deck, gameMode, lastAnswer, trustIndex, accuracy]);
+
+  const triggerScreenNarration = useCallback(() => {
+    const text = getScreenNarrationText();
+    if (text) {
+      speakText(text);
+    }
+  }, [getScreenNarrationText, speakText]);
+
+  // Accessibility: Voice Commands Parser
+  const handleVoiceCommand = useCallback((command) => {
+    const cmd = command.toLowerCase().trim();
+    
+    // 1. Language Setup
+    if (cmd.includes("english")) {
+      setLang("en");
+      speakText("Language set to English.");
+      return;
+    }
+    if (cmd.includes("hindi") || cmd.includes("हिंदी")) {
+      setLang("hi");
+      speakText("भाषा बदलकर हिंदी कर दी गई है।");
+      return;
+    }
+    if (cmd.includes("arabic") || cmd.includes("العربية")) {
+      setLang("ar");
+      speakText("تم تغيير اللغة إلى العربية.");
+      return;
+    }
+    if (cmd.includes("spanish") || cmd.includes("español")) {
+      setLang("es");
+      speakText("Idioma cambiado a español.");
+      return;
+    }
+
+    // 2. Jurisdiction Setup
+    if (cmd.includes("india") || cmd.includes("भारत")) {
+      setJurisdiction("in");
+      speakText("Jurisdiction set to India.");
+      return;
+    }
+    if (cmd.includes("usa") || cmd.includes("america") || cmd.includes("sec")) {
+      setJurisdiction("us");
+      speakText("Jurisdiction set to USA.");
+      return;
+    }
+    if (cmd.includes("uk") || cmd.includes("united kingdom") || cmd.includes("london") || cmd.includes("fca")) {
+      setJurisdiction("uk");
+      speakText("Jurisdiction set to United Kingdom.");
+      return;
+    }
+    if (cmd.includes("spain") || cmd.includes("españa") || cmd.includes("cnmv")) {
+      setJurisdiction("es");
+      speakText("Jurisdiction set to Spain.");
+      return;
+    }
+    if (cmd.includes("uae") || cmd.includes("emirates") || cmd.includes("dubai") || cmd.includes("sca")) {
+      setJurisdiction("ae");
+      speakText("Jurisdiction set to United Arab Emirates.");
+      return;
+    }
+
+    // 3. Navigation between screens
+    if (cmd.includes("learn mode") || cmd.includes("start learn") || cmd.includes("learning")) {
+      handleModeSelect("learn");
+      return;
+    }
+    if (cmd.includes("game mode") || cmd.includes("start game") || cmd.includes("playing mode")) {
+      handleModeSelect("game");
+      return;
+    }
+    if (cmd.includes("shield") || cmd.includes("scam shield") || cmd.includes("scamshield")) {
+      setScreen("scamshield");
+      return;
+    }
+    if (cmd.includes("portal") || cmd.includes("admin portal") || cmd.includes("dashboard")) {
+      setScreen("admin");
+      return;
+    }
+    if (cmd.includes("home") || cmd.includes("exit")) {
+      setScreen("intro");
+      return;
+    }
+    if (cmd.includes("profile")) {
+      setScreen("profile");
+      return;
+    }
+    if (cmd.includes("back") || cmd.includes("return")) {
+      if (screen === "profile" || screen === "share") {
+        setScreen("score");
+      } else if (screen === "topic-select" || screen === "mascot-select" || screen === "tutorial") {
+        setScreen("intro");
+      } else {
+        setScreen("intro");
+      }
+      return;
+    }
+    if (cmd.includes("play again") || cmd.includes("restart")) {
+      setCi(0);
+      setAnswers([]);
+      setShowReveal(false);
+      setLastAnswer(null);
+      setStreak(0);
+      setMaxStreak(0);
+      setTimes([]);
+      setScreen("intro");
+      return;
+    }
+
+    // 4. Topic Selection (Screen: topic-select)
+    if (screen === "topic-select") {
+      if (cmd.includes("beginner") || cmd.includes("new")) {
+        handleTopicSelect("beginner");
+        return;
+      }
+      if (cmd.includes("basics") || cmd.includes("investing basics")) {
+        handleTopicSelect("basics");
+        return;
+      }
+      if (cmd.includes("scams") || cmd.includes("investment scams")) {
+        handleTopicSelect("scams");
+        return;
+      }
+      if (cmd.includes("trading") || cmd.includes("fno") || cmd.includes("options")) {
+        handleTopicSelect("fno");
+        return;
+      }
+      if (cmd.includes("phishing") || cmd.includes("kyc")) {
+        handleTopicSelect("phishing");
+        return;
+      }
+      if (cmd.includes("deepfakes") || cmd.includes("ai")) {
+        handleTopicSelect("deepfakes");
+        return;
+      }
+      if (cmd.includes("social") || cmd.includes("instagram") || cmd.includes("whatsapp")) {
+        handleTopicSelect("social");
+        return;
+      }
+      if (cmd.includes("banking") || cmd.includes("upi")) {
+        handleTopicSelect("banking");
+        return;
+      }
+      if (cmd.includes("identity") || cmd.includes("impersonation")) {
+        handleTopicSelect("identity");
+        return;
+      }
+      if (cmd.includes("psychology") || cmd.includes("manipulation")) {
+        handleTopicSelect("psych");
+        return;
+      }
+      if (cmd.includes("safe") || cmd.includes("practices")) {
+        handleTopicSelect("safe");
+        return;
+      }
+    }
+
+    // 5. Mascot Selection (Screen: mascot-select)
+    if (screen === "mascot-select") {
+      if (cmd.includes("gemmy") || cmd.includes("gem")) {
+        handleMascotSelect(MASCOTS[0]);
+        return;
+      }
+      if (cmd.includes("baggie") || cmd.includes("bag")) {
+        handleMascotSelect(MASCOTS[1]);
+        return;
+      }
+      if (cmd.includes("naruto")) {
+        handleMascotSelect(MASCOTS[2]);
+        return;
+      }
+      if (cmd.includes("doraemon") || cmd.includes("dora")) {
+        handleMascotSelect(MASCOTS[3]);
+        return;
+      }
+    }
+
+    // 6. Generic Start / Continue
+    if (cmd.includes("continue") || cmd.includes("start") || cmd.includes("next") || cmd.includes("आगे") || cmd.includes("التالي") || cmd.includes("siguiente")) {
+      if (screen === "setup") {
+        setScreen("intro");
+        return;
+      }
+      if (screen === "tutorial") {
+        setScreen("game");
+        return;
+      }
+      if (screen === "game") {
+        if (gameMode === "learn" && learnStep === "concept") {
+          setLearnStep("swipe");
+        } else if (showReveal) {
+          handleNext();
+        }
+        return;
+      }
+    }
+
+    // 7. Swiping / Answering (Screen: game)
+    if (screen === "game" && !showReveal && learnStep !== "concept") {
+      if (
+        cmd.includes("scam") || 
+        cmd.includes("left") || 
+        cmd.includes("खराब") || 
+        cmd.includes("احتيال") || 
+        cmd.includes("estafa") ||
+        cmd.includes("fake")
+      ) {
+        handleSwipe("left");
+        return;
+      }
+      if (
+        cmd.includes("legit") || 
+        cmd.includes("right") || 
+        cmd.includes("सही") || 
+        cmd.includes("قانوني") || 
+        cmd.includes("legítimo") || 
+        cmd.includes("legitimo") ||
+        cmd.includes("safe") ||
+        cmd.includes("real")
+      ) {
+        handleSwipe("right");
+        return;
+      }
+      if (
+        cmd.includes("wisebot") || 
+        cmd.includes("bot") || 
+        cmd.includes("मदद") || 
+        cmd.includes("मساعدة") || 
+        cmd.includes("ayuda")
+      ) {
+        fetchWiseBotAnalysis(deck[ci]);
+        return;
+      }
+    }
+
+    // 8. ScamShield URL voice scans
+    if (cmd.startsWith("scan ") || cmd.startsWith("check ")) {
+      const target = command.substring(cmd.indexOf(" ") + 1).trim();
+      if (target) {
+        setScreen("scamshield");
+        setScamShieldInput(target);
+        setScamShieldTrigger(prev => prev + 1);
+        speakText(`Scanning ${target}. Please wait.`);
+        return;
+      }
+    }
+
+    // 9. Other standard actions
+    if (
+      cmd.includes("read") || 
+      cmd.includes("speak") || 
+      cmd.includes("पढ़ो") || 
+      cmd.includes("padho") || 
+      cmd.includes("اقرأ") || 
+      cmd.includes("leer") ||
+      cmd.includes("repeat")
+    ) {
+      if (screen === "game" && deck[ci]) {
+        if (showReveal) {
+          speakText(deck[ci].explanation);
+        } else {
+          speakText(deck[ci].content);
+        }
+      } else {
+        triggerScreenNarration();
+      }
+      return;
+    }
+    if (
+      cmd.includes("stop") || 
+      cmd.includes("रुको") || 
+      cmd.includes("ruko") || 
+      cmd.includes("قف") || 
+      cmd.includes("parar")
+    ) {
+      stopSpeech();
+      return;
+    }
+    if (
+      cmd.includes("report") ||
+      cmd.includes("report scam")
+    ) {
+      if (screen === "game" && showReveal && deck[ci]) {
+        const newReport = {
+          id: Date.now(),
+          content: `Scam Scenario: ${deck[ci].content} | Handle: ${deck[ci].profileName}`,
+          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
+          source: JURISDICTIONS[jurisdiction]?.name || "Global",
+          status: "Pending"
+        };
+        setReportedScams(prev => [newReport, ...prev]);
+        speakText(TRANSLATIONS[lang]?.reportedSuccess || "Scam reported successfully!");
+        return;
+      }
+    }
+  }, [screen, ci, showReveal, learnStep, deck, gameMode, jurisdiction, lang, speakText, stopSpeech, handleSwipe, handleNext, handleMascotSelect, handleTopicSelect, handleModeSelect, triggerScreenNarration, fetchWiseBotAnalysis]);
+
+  const toggleVoiceCommands = useCallback(() => {
+    setVoiceActive(prev => {
+      const nextState = !prev;
+      if (nextState) {
+        speakText(lang === "hi" ? "एक्सेसिबिलिटी वॉयस गाइड सक्रिय है। मैं आपकी सहायता करूँगा।" : 
+                  lang === "ar" ? "تم تفعيل التوجيه الصوتي للتسهيل. سأقوم بإرشادك." : 
+                  lang === "es" ? "Guía de voz activada. Te ayudaré a navegar." : 
+                  "Voice Guide activated. I will help you navigate.");
+      } else {
+        stopSpeech();
+        speakText(lang === "hi" ? "वॉयस गाइड बंद है।" : 
+                  lang === "ar" ? "تم إيقاف التوجيه الصوتي." : 
+                  lang === "es" ? "Guía de voz desactivada." : 
+                  "Voice Guide deactivated.");
+      }
+      return nextState;
+    });
+  }, [speakText, stopSpeech, lang]);
+
+  // Self-Healing Speech Recognition effect
+  useEffect(() => {
+    if (!voiceActive) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (err1) { console.warn(err1); }
+      }
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("Speech Recognition not supported in this browser.");
+      return;
+    }
+
+    let rec = recognitionRef.current;
+    if (!rec) {
+      rec = new SpeechRecognition();
+      recognitionRef.current = rec;
+    }
+
+    rec.continuous = false;
+    rec.interimResults = false;
+    const langCodes = { en: "en-US", hi: "hi-IN", ar: "ar-AE", es: "es-ES" };
+    rec.lang = langCodes[lang] || "en-US";
+
+    rec.onstart = () => {
+      setSpeechTranscript(
+        lang === "hi" ? "सुन रहा हूँ..." : 
+        lang === "ar" ? "جاري الاستماع..." : 
+        lang === "es" ? "Escuchando..." : 
+        "Listening..."
+      );
+    };
+
+    rec.onresult = (event) => {
+      const resultText = event.results[event.results.length - 1][0].transcript.trim();
+      setSpeechTranscript(`"${resultText}"`);
+      handleVoiceCommand(resultText);
+    };
+
+    rec.onerror = (e) => {
+      console.error("Speech recognition error:", e);
+      if (e.error === "not-allowed") {
+        setVoiceActive(false);
+        speakText("Microphone permission denied.");
+      }
+    };
+
+    rec.onend = () => {
+      if (voiceActiveRef.current) {
+        try {
+          rec.start();
+        } catch (err) {
+          console.error("Failed to restart speech recognition:", err);
+          setTimeout(() => {
+            if (voiceActiveRef.current) {
+              try { rec.start(); } catch (err2) { console.warn(err2); }
+            }
+          }, 300);
+        }
+      }
+    };
+
+    try {
+      rec.start();
+    } catch (err) {
+      console.error("Failed to start speech recognition:", err);
+    }
+
+    return () => {
+      if (rec) {
+        rec.onend = null;
+        try { rec.stop(); } catch (e) { console.warn(e); }
+      }
+    };
+  }, [voiceActive, lang, handleVoiceCommand, speakText]);
+
+  // Global Activation Gestures (Spacebar to start/repeat, double click to toggle)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (!voiceActive) {
+          setVoiceActive(true);
+          speakText(lang === "hi" ? "एक्सेसिबिलिटी वॉयस गाइड सक्रिय है।" : 
+                    lang === "ar" ? "تم تفعيل التوجيه الصوتي للتسهيل." : 
+                    lang === "es" ? "Guía de voz activada." : 
+                    "Voice Guide activated.");
+        } else {
+          triggerScreenNarration();
+        }
+      }
+    };
+
+    const handleDblClick = () => {
+      toggleVoiceCommands();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("dblclick", handleDblClick);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("dblclick", handleDblClick);
+    };
+  }, [voiceActive, lang, triggerScreenNarration, toggleVoiceCommands, speakText]);
+
+  // Cancel speech on screen switches
+  useEffect(() => {
+    window.speechSynthesis.cancel();
+  }, [screen]);
+
+  // Narration triggers on state shifts
+  useEffect(() => {
+    if (voiceActive) {
+      triggerScreenNarration();
+    }
+  }, [screen, ci, showReveal, learnStep, voiceActive, lang, triggerScreenNarration]);
+
+  // Narration for WiseBot responses
+  useEffect(() => {
+    if (!voiceActive || !wiseBotOpen) return;
+    if (wiseBotLoading) {
+      speakText("WiseBot is analyzing the message. Please wait.");
+    } else if (wiseBotResponse) {
+      if (wiseBotResponse.error) {
+        speakText(`WiseBot analysis failed: ${wiseBotResponse.error}`);
+      } else {
+        const text = `WiseBot Verdict is: ${wiseBotResponse.verdict || ""}. Confidence is: ${wiseBotResponse.confidence || ""}. Red flags are: ${(wiseBotResponse.red_flags || []).join(". ")}. Action is: ${wiseBotResponse.action || ""}.`;
+        speakText(text);
+      }
+    }
+  }, [wiseBotOpen, wiseBotLoading, wiseBotResponse, voiceActive, speakText]);
+
   return (
-    <div className={`sw-container ${isShaking ? "sw-shake-active" : ""}`}>
+    <div className={`sw-container ${isShaking ? "sw-shake-active" : ""} ${lang === "ar" ? "sw-rtl" : ""}`}>
+      {/* Translation loading screen */}
+      {translatingDeck && (
+        <div className="sw-trans-loading">
+          <div className="sw-wisebot-spinner" style={{ width: "50px", height: "50px", marginBottom: "20px" }}></div>
+          <h3 style={{ fontFamily: "Outfit, sans-serif" }}>
+            {lang === "hi" ? "Gemini AI परिदृश्य कार्डों का अनुवाद कर रहा है..." : 
+             lang === "ar" ? "يقوم الذكاء الاصطناعي بترجمة بطاقات السيناريو..." : 
+             lang === "es" ? "Gemini AI está traduciendo las tarjetas de escenario..." : 
+             "Gemini AI translating scenario cards..."}
+          </h3>
+        </div>
+      )}
+
+      {/* Voice commands status indicator */}
+      {voiceActive && (
+        <div style={{ position: "fixed", top: "10px", left: "50%", transform: "translateX(-50%)", zIndex: 10000, width: "min(340px, 90vw)" }}>
+          <div className="sw-voice-bar active">
+            <div className="sw-mic-pulse"></div>
+            <div>
+              <strong>{TRANSLATIONS[lang]?.voiceMicOn || "Listening..."}</strong>
+              <div style={{ fontSize: "10px", opacity: 0.8 }}>{speechTranscript}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
+        {screen === "setup" && (
+          <motion.div
+            key="setup"
+            className="sw-content-wrapper sw-setup-screen"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+          >
+            <h2 style={{ fontSize: "32px", fontWeight: "800", marginBottom: "8px", textAlign: "center", background: "linear-gradient(90deg, #00d2ff, #7b2ff7, #00d2ff)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              {TRANSLATIONS[lang]?.title || "SwipeWise"}
+            </h2>
+            <p style={{ color: "var(--text-secondary)", marginBottom: "32px", fontSize: "14px", textAlign: "center" }}>
+              {TRANSLATIONS[lang]?.setupTitle || "Customize Your Experience"}
+            </p>
+
+            <div className="sw-selection-group">
+              <label>{TRANSLATIONS[lang]?.selectLang || "Select Language"}</label>
+              <div className="sw-grid-select">
+                <button className={`sw-select-btn ${lang === "en" ? "active" : ""}`} onClick={() => setLang("en")}>🇬🇧 English</button>
+                <button className={`sw-select-btn ${lang === "hi" ? "active" : ""}`} onClick={() => setLang("hi")}>🇮🇳 हिंदी (Hindi)</button>
+                <button className={`sw-select-btn ${lang === "ar" ? "active" : ""}`} onClick={() => setLang("ar")}>🇦🇪 العربية (Arabic)</button>
+                <button className={`sw-select-btn ${lang === "es" ? "active" : ""}`} onClick={() => setLang("es")}>🇪🇸 Español (Spanish)</button>
+              </div>
+            </div>
+
+            <div className="sw-selection-group" style={{ marginTop: "20px" }}>
+              <label>{TRANSLATIONS[lang]?.selectJurisdiction || "Select Jurisdiction"}</label>
+              <div className="sw-grid-select">
+                <button className={`sw-select-btn ${jurisdiction === "in" ? "active" : ""}`} onClick={() => setJurisdiction("in")}>🇮🇳 India (SEBI)</button>
+                <button className={`sw-select-btn ${jurisdiction === "us" ? "active" : ""}`} onClick={() => setJurisdiction("us")}>🇺🇸 USA (SEC)</button>
+                <button className={`sw-select-btn ${jurisdiction === "uk" ? "active" : ""}`} onClick={() => setJurisdiction("uk")}>🇬🇧 UK (FCA)</button>
+                <button className={`sw-select-btn ${jurisdiction === "es" ? "active" : ""}`} onClick={() => setJurisdiction("es")}>🇪🇸 Spain (CNMV)</button>
+                <button className={`sw-select-btn ${jurisdiction === "ae" ? "active" : ""}`} onClick={() => setJurisdiction("ae")} style={{ gridColumn: "span 2" }}>🇦🇪 UAE (SCA/FSRA)</button>
+              </div>
+            </div>
+
+            <button
+              className="sw-start-btn"
+              onClick={() => setScreen("intro")}
+              style={{ width: "100%", marginTop: "32px" }}
+            >
+              {TRANSLATIONS[lang]?.startBtn || "Start Playing"}
+            </button>
+          </motion.div>
+        )}
+
         {screen === "intro" && (
           <motion.div
             key="intro"
@@ -493,6 +1188,7 @@ Message:
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
           >
+
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               <motion.div 
                 className="sw-shield-icon"
@@ -507,30 +1203,29 @@ Message:
                   style={{ width: "min(380px, 90vw)", height: "auto", objectFit: "contain", marginBottom: 0 }}
                 />
               </motion.div>
-              {/* <h1 className="sw-title">SwipeWise</h1> */}
               <div className="sw-subtitle" style={{ marginTop: "4px", marginBottom: "12px" }}>
-                BY SEBI × IOSCO TECHSPRINT
+                {TRANSLATIONS[lang]?.subtitle || "BY SEBI × IOSCO TECHSPRINT"}
               </div>
 
               <div className="sw-glass-card">
-                <h2 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "10px" }}>Test Your Awareness Index</h2>
+                <h2 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "10px" }}>{lang === "hi" ? "अपना जागरूकता सूचकांक आंके" : lang === "ar" ? "اختبر مؤشر الوعي الخاص بك" : lang === "es" ? "Prueba tu Índice de Conciencia" : "Test Your Awareness Index"}</h2>
                 <p style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-                  Can you spot scams before they trap you?
+                  {lang === "hi" ? "क्या आप जाल में फंसने से पहले घोटालों को पहचान सकते हैं?" : lang === "ar" ? "هل يمكنك كشف عمليات الاحتيال قبل الوقوع فيها؟" : lang === "es" ? "¿Puedes detectar las estafas antes de que te atrapen?" : "Can you spot scams before they trap you?"}
                 </p>
                 <div className="sw-hint-container">
                   <div className="sw-hint-item">
                     <span className="sw-hint-emoji">👈</span>
-                    <span className="sw-hint-label" style={{ color: "var(--scam-color)" }}>Scam</span>
+                    <span className="sw-hint-label" style={{ color: "var(--scam-color)" }}>{TRANSLATIONS[lang]?.scam || "Scam"}</span>
                   </div>
                   <div className="sw-hint-item">
                     <span className="sw-hint-emoji">👉</span>
-                    <span className="sw-hint-label" style={{ color: "var(--legit-color)" }}>Legit</span>
+                    <span className="sw-hint-label" style={{ color: "var(--legit-color)" }}>{TRANSLATIONS[lang]?.legit || "Legit"}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div style={{ width: '100%', paddingBottom: '20px' }}>
+            <div style={{ width: '100%', paddingBottom: '60px' }}>
               <div className="sw-mode-buttons">
                 <motion.button
                   className="sw-start-btn sw-mode-btn sw-mode-learn"
@@ -540,8 +1235,8 @@ Message:
                 >
                   <div className="sw-mode-icon">🧠</div>
                   <div className="sw-mode-text">
-                    <strong>Learn Mode</strong>
-                    <span>Guided, no pressure</span>
+                    <strong>{TRANSLATIONS[lang]?.learnMode || "Learn Mode"}</strong>
+                    <span>{lang === "hi" ? "निर्देशित, बिना तनाव के" : lang === "ar" ? "موجه، بدون ضغوط" : lang === "es" ? "Guiado, sin presiones" : "Guided, no pressure"}</span>
                   </div>
                 </motion.button>
                 <motion.button
@@ -552,13 +1247,13 @@ Message:
                 >
                   <div className="sw-mode-icon">🎮</div>
                   <div className="sw-mode-text">
-                    <strong>Game Mode</strong>
-                    <span>Timer & streak based</span>
+                    <strong>{TRANSLATIONS[lang]?.gameMode || "Game Mode"}</strong>
+                    <span>{lang === "hi" ? "समय और सिलसिला आधारित" : lang === "ar" ? "قائم على الوقت والتحدي" : lang === "es" ? "Basado en tiempo y racha" : "Timer & streak based"}</span>
                   </div>
                 </motion.button>
               </div>
               <div className="sw-footer-info" style={{ marginTop: "12px", fontSize: "10px", color: "#444" }}>
-                10 rounds • 3 min • Free
+                {lang === "hi" ? "10 राउंड • 3 मिनट • मुफ्त" : lang === "ar" ? "١٠ جولات • ٣ دقائق • مجاني" : lang === "es" ? "10 rondas • 3 min • Gratis" : "10 rounds • 3 min • Free"}
               </div>
             </div>
           </motion.div>
@@ -751,12 +1446,22 @@ Message:
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
             <div className={`sw-top-app-bar ${gameMode === 'learn' ? 'sw-top-app-bar--learn' : ''}`}>
-              <button className="sw-home-icon-btn" onClick={handleExitHome} title="Exit to Home">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                  <polyline points="9 22 9 12 15 12 15 22"/>
-                </svg>
-              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button className="sw-home-icon-btn" onClick={handleExitHome} title="Exit to Home">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    <polyline points="9 22 9 12 15 12 15 22"/>
+                  </svg>
+                </button>
+                <button 
+                  className={`sw-home-icon-btn ${voiceActive ? "active" : ""}`} 
+                  onClick={toggleVoiceCommands} 
+                  title="Toggle Voice Commands"
+                  style={{ background: voiceActive ? "rgba(46, 213, 115, 0.2)" : "rgba(255,255,255,0.05)", border: "none", borderRadius: "50%", width: "36px", height: "36px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: voiceActive ? "#2ed573" : "white" }}
+                >
+                  🎙️
+                </button>
+              </div>
               <div className="sw-game-header" style={{ flex: 1, paddingTop: 0 }}>
                 <div className="sw-progress-bar">
                   {deck.map((_, i) => (
@@ -816,12 +1521,26 @@ Message:
                     <p>{deck[ci].moduleData.whyPeopleFall}</p>
                   </div>
                 </div>
-                <button 
-                  className="sw-action-btn sw-concept-next-btn"
-                  onClick={() => setLearnStep("swipe")}
-                >
-                  Ready to Practice? Let's Go →
-                </button>
+                <div style={{ display: "flex", gap: "12px", marginTop: "20px", width: "100%" }}>
+                  <button 
+                    className="sw-action-btn sw-concept-next-btn"
+                    onClick={() => setLearnStep("swipe")}
+                    style={{ flex: 1 }}
+                  >
+                    Ready to Practice? Let's Go →
+                  </button>
+                  <button 
+                    className={`sw-tts-btn ${ttsActive ? "active" : ""}`}
+                    onClick={() => {
+                      if (ttsActive) stopSpeech();
+                      else speakText(`${deck[ci].moduleData.concept}. For example: ${deck[ci].moduleData.example}`);
+                    }}
+                    title="Listen to Concept"
+                    style={{ width: "64px", height: "64px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "50%", cursor: "pointer", fontSize: "20px", color: ttsActive ? "#00d2ff" : "white" }}
+                  >
+                    🔊
+                  </button>
+                </div>
               </motion.div>
             )}
 
@@ -972,13 +1691,26 @@ Message:
                       </div>
                     )}
 
-                    <div className="sw-wisebot-btn-container">
+                    <div className="sw-wisebot-btn-container" style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
                       <button 
                         className="sw-wisebot-btn"
                         onClick={(e) => { e.stopPropagation(); fetchWiseBotAnalysis(deck[ci]); }}
                         onPointerDown={(e) => e.stopPropagation()}
+                        style={{ flex: 1 }}
                       >
                         💡 Ask WiseBot
+                      </button>
+                      <button 
+                        className={`sw-wisebot-btn ${ttsActive ? "active" : ""}`}
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          if (ttsActive) stopSpeech(); 
+                          else speakText(deck[ci].content); 
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        style={{ flex: 1, background: ttsActive ? "rgba(0, 210, 255, 0.2)" : "" }}
+                      >
+                        🔊 {ttsActive ? "Stop" : "Listen Card"}
                       </button>
                     </div>
                   </motion.div>
@@ -1036,13 +1768,45 @@ Message:
                         {gameMode === 'learn' ? 'Next Lesson →' : 'Tap anywhere to continue →'}
                       </div>
                       
-                      <div className="sw-wisebot-btn-container" style={{ marginTop: "16px", display: "flex", justifyContent: "center" }}>
+                      <div className="sw-wisebot-btn-container" style={{ marginTop: "16px", display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap" }}>
                         <button 
                           className="sw-wisebot-btn"
                           onClick={(e) => { e.stopPropagation(); fetchWiseBotAnalysis(deck[ci]); }}
                           onPointerDown={(e) => e.stopPropagation()}
+                          style={{ flex: "1 1 45%" }}
                         >
                           💡 Ask WiseBot
+                        </button>
+                        <button 
+                          className={`sw-wisebot-btn ${ttsActive ? "active" : ""}`}
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (ttsActive) stopSpeech(); 
+                            else speakText(`${deck[ci].explanation}. Red flags were: ${deck[ci].redFlags.join(". ")}`); 
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          style={{ flex: "1 1 45%", background: ttsActive ? "rgba(0, 210, 255, 0.2)" : "" }}
+                        >
+                          🔊 {ttsActive ? "Stop" : "Listen"}
+                        </button>
+                        <button 
+                          className="sw-wisebot-btn"
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            const newReport = {
+                              id: Date.now(),
+                              content: `Scam Scenario: ${deck[ci].content} | Handle: ${deck[ci].profileName}`,
+                              timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
+                              source: JURISDICTIONS[jurisdiction]?.name || "Global",
+                              status: "Pending"
+                            };
+                            setReportedScams(prev => [newReport, ...prev]);
+                            alert(TRANSLATIONS[lang]?.reportedSuccess || "Scam reported successfully to regulators!");
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          style={{ flex: "1 1 90%", background: "rgba(255,71,87,0.15)", border: "1px solid var(--scam-color)", color: "var(--scam-color)", fontWeight: "bold" }}
+                        >
+                          {TRANSLATIONS[lang]?.reportScamBtn || "🚩 Report Scam"}
                         </button>
                       </div>
                     </div>
@@ -1681,7 +2445,144 @@ Message:
             
           </motion.div>
         )}
+
+        {screen === "scamshield" && (
+          <motion.div
+            key="scamshield"
+            className="sw-content-wrapper"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            style={{ paddingBottom: "100px", minHeight: "auto" }}
+          >
+            <ScamShield 
+              translations={TRANSLATIONS} 
+              lang={lang} 
+              apiKey={import.meta.env.VITE_GEMINI_API_KEY} 
+              input={scamShieldInput}
+              setInput={setScamShieldInput}
+              triggerScan={scamShieldTrigger}
+              onScanComplete={(summary) => {
+                if (voiceActive) {
+                  speakText(summary);
+                }
+              }}
+            />
+          </motion.div>
+        )}
+
+        {screen === "admin" && (
+          <motion.div
+            key="admin"
+            className="sw-content-wrapper"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            style={{ paddingBottom: "100px", maxWidth: "800px", minHeight: "auto" }}
+          >
+            <AdminDashboard 
+              translations={TRANSLATIONS} 
+              lang={lang} 
+              gameCards={GAME_CARDS} 
+              reportedScams={reportedScams}
+              onResolveReport={(id) => setReportedScams(prev => prev.filter(r => r.id !== id))}
+              onAddCard={(card) => setCustomCards(prev => [...prev, card])}
+              apiKey={import.meta.env.VITE_GEMINI_API_KEY}
+            />
+          </motion.div>
+        )}
       </AnimatePresence>
+
+      {/* Animated Pop-up Modals for Settings */}
+      <AnimatePresence>
+        {activePopup === "lang" && (
+          <div className="sw-modal-backdrop" onClick={() => setActivePopup(null)}>
+            <motion.div 
+              className="sw-modal-content"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "16px", textTransform: "uppercase", letterSpacing: "1px", textAlign: "center" }}>
+                {TRANSLATIONS[lang]?.selectLang || "Select Language"}
+              </h3>
+              <div className="sw-modal-grid">
+                <button className={`sw-select-btn ${lang === "en" ? "active" : ""}`} onClick={() => { setLang("en"); setActivePopup(null); }}>🇬🇧 English</button>
+                <button className={`sw-select-btn ${lang === "hi" ? "active" : ""}`} onClick={() => { setLang("hi"); setActivePopup(null); }}>🇮🇳 हिंदी (Hindi)</button>
+                <button className={`sw-select-btn ${lang === "ar" ? "active" : ""}`} onClick={() => { setLang("ar"); setActivePopup(null); }}>🇦🇪 العربية (Arabic)</button>
+                <button className={`sw-select-btn ${lang === "es" ? "active" : ""}`} onClick={() => { setLang("es"); setActivePopup(null); }}>🇪🇸 Español (Spanish)</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {activePopup === "jurisdiction" && (
+          <div className="sw-modal-backdrop" onClick={() => setActivePopup(null)}>
+            <motion.div 
+              className="sw-modal-content"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "16px", textTransform: "uppercase", letterSpacing: "1px", textAlign: "center" }}>
+                {TRANSLATIONS[lang]?.selectJurisdiction || "Select Jurisdiction"}
+              </h3>
+              <div className="sw-modal-grid">
+                <button className={`sw-select-btn ${jurisdiction === "in" ? "active" : ""}`} onClick={() => { setJurisdiction("in"); setActivePopup(null); }}>🇮🇳 India (SEBI)</button>
+                <button className={`sw-select-btn ${jurisdiction === "us" ? "active" : ""}`} onClick={() => { setJurisdiction("us"); setActivePopup(null); }}>🇺🇸 USA (SEC)</button>
+                <button className={`sw-select-btn ${jurisdiction === "uk" ? "active" : ""}`} onClick={() => { setJurisdiction("uk"); setActivePopup(null); }}>🇬🇧 UK (FCA)</button>
+                <button className={`sw-select-btn ${jurisdiction === "es" ? "active" : ""}`} onClick={() => { setJurisdiction("es"); setActivePopup(null); }}>🇪🇸 Spain (CNMV)</button>
+                <button className={`sw-select-btn ${jurisdiction === "ae" ? "active" : ""}`} onClick={() => { setJurisdiction("ae"); setActivePopup(null); }} style={{ gridColumn: "span 2" }}>🇦🇪 UAE (SCA/FSRA)</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom Navigation Bar */}
+      {["intro", "scamshield", "admin", "score", "profile"].includes(screen) && (
+        <div className="sw-bottom-nav">
+          <button 
+            className="sw-nav-item" 
+            onClick={() => setActivePopup("lang")}
+          >
+            <span className="sw-nav-icon">🌐</span>
+            <span>{lang.toUpperCase()}</span>
+          </button>
+          <button 
+            className="sw-nav-item" 
+            onClick={() => setActivePopup("jurisdiction")}
+          >
+            <span className="sw-nav-icon">📍</span>
+            <span>{jurisdiction.toUpperCase()}</span>
+          </button>
+          <button 
+            className={`sw-nav-item ${screen === "intro" ? "active" : ""}`} 
+            onClick={() => setScreen("intro")}
+          >
+            <span className="sw-nav-icon">🎮</span>
+            <span>{TRANSLATIONS[lang]?.navHome || "Home"}</span>
+          </button>
+          <button 
+            className={`sw-nav-item ${screen === "scamshield" ? "active" : ""}`} 
+            onClick={() => setScreen("scamshield")}
+          >
+            <span className="sw-nav-icon">🛡️</span>
+            <span>{TRANSLATIONS[lang]?.navShield || "ScamShield"}</span>
+          </button>
+          <button 
+            className={`sw-nav-item ${screen === "admin" ? "active" : ""}`} 
+            onClick={() => setScreen("admin")}
+          >
+            <span className="sw-nav-icon">🏛️</span>
+            <span>{TRANSLATIONS[lang]?.navAdmin || "Portal"}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
